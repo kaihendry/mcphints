@@ -10,7 +10,7 @@ Annotations are self-declared, unverified hints, not enforced controls. This
 tool exists to make that gap visible before you decide which MCP tool actions
 to allow.
 
-[![Demo](img/demo-thumb.jpg)](https://youtu.be/SvhuBZY4Fu0)
+[![Demo](https://s.natalian.org/2026-07-20/mcphintthumb.png)](https://youtu.be/SvhuBZY4Fu0)
 
 ## Run
 
