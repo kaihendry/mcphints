@@ -96,9 +96,9 @@ func cell(h Hint) string {
 	case !h.Declared:
 		return fmt.Sprintf("⚠️ assumed %v", h.Value)
 	case h.Risky:
-		return fmt.Sprintf("🔴 declared %v", h.Value)
+		return fmt.Sprintf("🔴 claimed %v", h.Value)
 	default:
-		return fmt.Sprintf("🟢 declared %v", h.Value)
+		return fmt.Sprintf("🟢 claimed %v", h.Value)
 	}
 }
 

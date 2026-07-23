@@ -53,7 +53,7 @@ i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
 
 {{if .Done}}
 {{if .Server}}<p><strong>Server:</strong> <code>{{.Server}}</code>{{if .Fetched}} &middot; fetched {{.Fetched}}{{end}}</p>{{end}}
-{{if .GistURL}}<p class="note">Published as a secret gist: <a href="{{.GistURL}}">{{.GistURL}}</a></p>{{end}}
+{{if .GistURL}}<p class="note">Published as an unlisted gist (visible to anyone with the URL): <a href="{{.GistURL}}">{{.GistURL}}</a></p>{{end}}
 {{if .GistErr}}<p class="err">{{.GistErr}}</p>{{end}}
 <table>
   <tr><th>Tool</th><th>readOnlyHint</th><th>destructiveHint</th><th>idempotentHint</th><th>openWorldHint</th></tr>
@@ -64,8 +64,8 @@ i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
     <td>
       {{if .Moot}}<span class="b moot">n/a &mdash; read-only</span>
       {{else if not .Declared}}<span class="b assumed">assumed {{.Value}}</span>
-      {{else if .Risky}}<span class="b risk">declared {{.Value}}</span>
-      {{else}}<span class="b safe">declared {{.Value}}</span>
+      {{else if .Risky}}<span class="b risk">claimed {{.Value}}</span>
+      {{else}}<span class="b safe">claimed {{.Value}}</span>
       {{end}}
     </td>
     {{end}}
@@ -74,8 +74,8 @@ i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
 </table>
 
 <p class="legend">
-  <span class="b safe">declared</span> author explicitly vouches for the safer value &nbsp;
-  <span class="b risk">declared</span> author explicitly flags the riskier value &nbsp;
+  <span class="b safe">claimed</span> server claims the safer value (unverified) &nbsp;
+  <span class="b risk">claimed</span> server claims the riskier value (unverified) &nbsp;
   <span class="b assumed">assumed</span> server said nothing &mdash; spec default (worst case) applies
 </p>
 

@@ -24,7 +24,8 @@ Then open http://localhost:8321, and either:
   command, and it fetches `tools/list` for you, or
 - paste `tools/list` JSON directly.
 
-Results can also be published as a secret GitHub gist via `gh`.
+Results can also be published as an unlisted GitHub gist via `gh` — visible
+to anyone with the URL, not access-controlled.
 
 ## License
 
