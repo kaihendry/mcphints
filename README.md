@@ -20,8 +20,9 @@ go run .
 
 Then open http://localhost:8321, and either:
 
-- give it an `http(s)://` MCP server URL (OAuth via `mcp-remote`) or a stdio
-  command, and it fetches `tools/list` for you, or
+- give it an `http(s)://` MCP server URL or a stdio command, and it fetches
+  `tools/list` for you — OAuth is handled by the MCP inspector, which opens a
+  browser on first use and caches the token in `~/.mcp-inspector/`, or
 - paste `tools/list` JSON directly.
 
 Results can also be published as an unlisted GitHub gist via `gh` — visible

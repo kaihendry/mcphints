@@ -32,8 +32,8 @@ every hint a server does <em>not</em> declare must be assumed at its conservativ
 i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
 
 <form method="post" action="/" hx-post="/" hx-target="#result" hx-select="#result" hx-swap="outerHTML">
-  <p class="hint">Fetch straight from a server &mdash; an <code>http(s)://</code> URL (OAuth handled via mcp-remote;
-  first use may open a browser to authorise) or a stdio command:</p>
+  <p class="hint">Fetch straight from a server &mdash; an <code>http(s)://</code> URL (OAuth handled by the
+  inspector; first use may open a browser to authorise) or a stdio command:</p>
   <input name="server" value="{{.ServerInput}}" list="known-servers"
          placeholder="https://api.fastmail.com/mcp   or   uvx awslabs.aws-documentation-mcp-server@latest">
   <datalist id="known-servers">

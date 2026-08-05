@@ -12,6 +12,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -122,19 +123,34 @@ func markdown(server, fetched string, rows []Row) string {
 	return b.String()
 }
 
-// fetchTools does what the Makefile targets did: run the inspector CLI,
-// routing http(s) servers through the mcp-remote OAuth shim.
+// fetchTools does what the Makefile targets did: run the inspector CLI.
+// Inspector v2 speaks Streamable HTTP and OAuth itself, so a URL goes straight
+// in — no mcp-remote shim. (Passing one as the target broke: the inspector's
+// arg parser drops everything from `-y` on, so it spawned a bare `npx`, which
+// is an interactive shell, and fed the handshake to it — hence the baffling
+// `sh: method:initialize: command not found`.)
 func fetchTools(server string) (string, error) {
-	args := []string{"-y", "@modelcontextprotocol/inspector", "--cli"}
+	args := []string{"-y", "@modelcontextprotocol/inspector@2", "--cli"}
 	if strings.HasPrefix(server, "http://") || strings.HasPrefix(server, "https://") {
-		args = append(args, "npx", "-y", "mcp-remote", server)
+		// Transport is only auto-detected from a /mcp or /sse path, and the 15s
+		// default connect timeout is far too short for a browser OAuth round-trip.
+		transport := "http"
+		if strings.HasSuffix(server, "/sse") {
+			transport = "sse"
+		}
+		args = append(args, "--transport", transport, "--server-url", server, "--connect-timeout", "0")
 	} else {
 		args = append(args, strings.Fields(server)...)
 	}
 	args = append(args, "--method", "tools/list")
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	// Long enough to sign in and consent on a first run.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "npx", args...)
+	// We exec with pipes, so the inspector sees no TTY and would refuse to start
+	// interactive OAuth. This says a human *is* here — go ahead and open the
+	// browser. (The consent URL also lands in stderr, so it surfaces on failure.)
+	cmd.Env = append(os.Environ(), "MCP_AUTO_OPEN_ENABLED=true")
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	if err := cmd.Run(); err != nil {
