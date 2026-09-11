@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"embed"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 )
@@ -38,6 +40,7 @@ type Tool struct {
 }
 
 type Hint struct {
+	Name     string
 	Value    bool
 	Declared bool
 	Risky    bool // holds the worst-case value (which is always the default)
@@ -52,7 +55,12 @@ type Row struct {
 }
 
 // The spec's defaults are deliberately the worst case.
-var defaults = [4]bool{false, true, false, true}
+var defaults = [4]Hint{
+	{Name: "readOnlyHint", Value: false},
+	{Name: "destructiveHint", Value: true},
+	{Name: "idempotentHint", Value: false},
+	{Name: "openWorldHint", Value: true},
+}
 
 func buildRow(t Tool) Row {
 	r := Row{Name: t.Name, Description: t.Description, None: t.Annotations == nil}
@@ -62,18 +70,50 @@ func buildRow(t Tool) Row {
 		ptrs = [4]*bool{a.ReadOnlyHint, a.DestructiveHint, a.IdempotentHint, a.OpenWorldHint}
 	}
 	for i, p := range ptrs {
-		h := Hint{Value: defaults[i]}
+		h := defaults[i]
 		if p != nil {
 			h.Value = *p
 			h.Declared = true
 		}
-		h.Risky = h.Value == defaults[i]
+		h.Risky = h.Value == defaults[i].Value
 		r.Hints[i] = h
 	}
 	if r.Hints[0].Declared && r.Hints[0].Value {
 		r.Hints[1].Moot, r.Hints[2].Moot = true, true
 	}
 	return r
+}
+
+func sortRows(rows []Row, key string, reverse bool) {
+	if key == "" {
+		if reverse {
+			slices.Reverse(rows)
+		}
+		return
+	}
+	i := slices.IndexFunc(defaults[:], func(h Hint) bool { return h.Name == key })
+	if key != "name" && i < 0 {
+		return
+	}
+	rank := func(h Hint) int {
+		if h.Moot {
+			return 2 // n/a stays last in either direction
+		}
+		if h.Value != reverse {
+			return 1
+		}
+		return 0
+	}
+	slices.SortStableFunc(rows, func(a, b Row) int {
+		if key == "name" {
+			order := strings.Compare(a.Name, b.Name)
+			if reverse {
+				return -order
+			}
+			return order
+		}
+		return cmp.Compare(rank(a.Hints[i]), rank(b.Hints[i]))
+	})
 }
 
 type payload struct {
@@ -129,16 +169,24 @@ func markdown(server, fetched string, rows []Row) string {
 		fmt.Fprintf(&b, "- **Fetched:** %s\n", fetched)
 	}
 	fmt.Fprintf(&b, "- **Published:** %s\n\n", time.Now().UTC().Format(time.RFC3339))
-	b.WriteString("| Tool | readOnlyHint | destructiveHint | idempotentHint | openWorldHint |\n|---|---|---|---|---|\n")
-	for _, r := range rows {
-		fmt.Fprintf(&b, "| `%s` | %s | %s | %s | %s |\n",
-			r.Name, cell(r.Hints[0]), cell(r.Hints[1]), cell(r.Hints[2]), cell(r.Hints[3]))
+	b.WriteString("## Tools\n\n")
+	if len(rows) == 0 {
+		b.WriteString("No tools returned.\n\n")
 	}
 	for _, r := range rows {
+		fmt.Fprintf(&b, "### `%s`\n\n", r.Name)
 		if r.Description != "" {
-			fmt.Fprintf(&b, "\n<details>\n<summary>%s — description</summary>\n\n<pre>%s</pre>\n</details>\n",
-				template.HTMLEscapeString(r.Name), template.HTMLEscapeString(r.Description))
+			fmt.Fprintf(&b, "#### Description\n\n<p>%s</p>\n\n",
+				strings.ReplaceAll(template.HTMLEscapeString(r.Description), "\n", "<br>\n"))
 		}
+		b.WriteString("#### Annotations\n\n")
+		if r.None {
+			b.WriteString("No annotations declared.\n\n")
+		}
+		for _, h := range r.Hints {
+			fmt.Fprintf(&b, "- `%s`: %s\n", h.Name, cell(h))
+		}
+		b.WriteString("\n")
 	}
 	b.WriteString("\nAbsent hints (⚠️) are shown at the [spec's conservative defaults](https://modelcontextprotocol.io/specification/2025-11-25/schema#toolannotations), i.e. the worst case.\n\n")
 	b.WriteString("> **Caveat:** annotations are self-declared, unverified hints. Record them as vendor claims, not controls.\n")
@@ -205,7 +253,7 @@ func newHandler() http.Handler {
 			http.Error(w, "forbidden origin", http.StatusForbidden)
 			return
 		}
-		var data struct {
+		data := struct {
 			Payload     string
 			Snapshot    string
 			ServerInput string
@@ -216,12 +264,17 @@ func newHandler() http.Handler {
 			Fetched     string
 			GistURL     string
 			GistErr     string
-		}
+			Sort        string
+			Reverse     bool
+			HintTypes   [4]Hint
+		}{HintTypes: defaults}
 		if r.Method == http.MethodPost {
 			data.Payload = r.FormValue("payload")
 			data.ServerInput = strings.TrimSpace(r.FormValue("server"))
+			data.Sort = r.FormValue("sort")
+			data.Reverse = r.FormValue("reverse") == "1"
 			publishing := r.FormValue("action") == "gist"
-			fetching := data.ServerInput != "" && !publishing
+			fetching := data.ServerInput != "" && !publishing && !r.PostForm.Has("sort")
 			raw := data.Payload
 			var p payload
 			var snapshot []byte
@@ -250,6 +303,7 @@ func newHandler() http.Handler {
 				for _, t := range p.Tools {
 					data.Rows = append(data.Rows, buildRow(t))
 				}
+				sortRows(data.Rows, data.Sort, data.Reverse)
 				data.Done = true
 				if publishing {
 					data.GistURL, err = publishGist(markdown(p.Server, p.Fetched, data.Rows), p.Server)

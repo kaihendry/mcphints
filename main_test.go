@@ -80,8 +80,8 @@ printf '%s\n' '{"tools":[
 					!strings.Contains(body, "OAuth diagnostic: https://auth.example.test/authorize") {
 					t.Errorf("missing Inspector stderr in error page: %s", body)
 				}
-				if strings.Contains(body, "<table>") {
-					t.Error("failed fetch rendered a results table")
+				if strings.Contains(body, `<section class="tool">`) {
+					t.Error("failed fetch rendered tool results")
 				}
 				return
 			}
@@ -99,7 +99,7 @@ printf '%s\n' '{"tools":[
 				t.Errorf("invalid fetched timestamp: %v", err)
 			}
 
-			rows := regexp.MustCompile(`(?s)<tr>\s*<td>(.*?)</td>(.*?)</tr>`).FindAllStringSubmatch(body, -1)
+			sections := regexp.MustCompile(`(?s)<section class="tool">\s*<h3>(.*?)</h3>(.*?)</section>`).FindAllStringSubmatch(body, -1)
 			cases := []struct {
 				name  string
 				hints []string
@@ -108,24 +108,28 @@ printf '%s\n' '{"tools":[
 				{"read_only", []string{"safe:claimed true", "moot:n/a — read-only", "moot:n/a — read-only", "assumed:assumed true"}},
 				{"annotated", []string{"risk:claimed false", "safe:claimed false", "safe:claimed true", "safe:claimed false"}},
 			}
-			if len(rows) != len(cases) {
-				t.Fatalf("got %d tool rows, want %d: %s", len(rows), len(cases), body)
+			if len(sections) != len(cases) {
+				t.Fatalf("got %d tool sections, want %d: %s", len(sections), len(cases), body)
 			}
-			badges := regexp.MustCompile(`<span class="b ([^"]+)">([^<]+)</span>`)
+			badges := regexp.MustCompile(`<li><code>([^<]+)</code>:\s*<span class="b ([^"]+)">([^<]+)</span>`)
 			for i, tc := range cases {
-				name, _, _ := strings.Cut(rows[i][1], "<")
+				name := html.UnescapeString(sections[i][1])
 				if name != tc.name {
-					t.Errorf("row %d tool = %q, want %q", i, name, tc.name)
+					t.Errorf("section %d tool = %q, want %q", i, name, tc.name)
 				}
-				if none := strings.Contains(rows[i][1], "no annotations at all"); none != (tc.name == "unknown") {
+				if none := strings.Contains(sections[i][2], "No annotations declared."); none != (tc.name == "unknown") {
 					t.Errorf("%s: missing-annotations label = %v", tc.name, none)
 				}
-				if description := strings.Contains(rows[i][1], `<summary>Description</summary><p>Read the server without changes.</p>`); description != (tc.name == "read_only") {
+				if description := strings.Contains(sections[i][2], `<h4>Description</h4><p class="description">Read the server without changes.</p>`); description != (tc.name == "read_only") {
 					t.Errorf("%s: description displayed = %v", tc.name, description)
 				}
-				var hints []string
-				for _, badge := range badges.FindAllStringSubmatch(rows[i][2], -1) {
-					hints = append(hints, badge[1]+":"+html.UnescapeString(badge[2]))
+				var labels, hints []string
+				for _, badge := range badges.FindAllStringSubmatch(sections[i][2], -1) {
+					labels = append(labels, badge[1])
+					hints = append(hints, badge[2]+":"+html.UnescapeString(badge[3]))
+				}
+				if !slices.Equal(labels, []string{"readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"}) {
+					t.Errorf("%s hint labels = %q", tc.name, labels)
 				}
 				if !slices.Equal(hints, tc.hints) {
 					t.Errorf("%s hints = %q, want %q", tc.name, hints, tc.hints)
@@ -192,25 +196,25 @@ printf 'https://gist.github.com/example/snapshot\n'`,
 	const server = "https://api.fastmail.com/mcp"
 	const fetched = "2020-01-02T03:04:05Z"
 	const description = "Read <script>alert(1)</script>.\nSecond line | preserved."
-	const source = `{"result":{"server":"` + server + `","fetched":"` + fetched + `","tools":[{"name":"read_only","title":"A \"quoted\" <title>","description":"Read <script>alert(1)</script>.\nSecond line | preserved.","annotations":{"readOnlyHint":true,"destructiveHint":true,"idempotentHint":false}}]}}`
+	const source = `{"result":{"server":"` + server + `","fetched":"` + fetched + `","tools":[{"name":"read_only","title":"A \"quoted\" <title>","description":"Read <script>alert(1)</script>.\nSecond line | preserved.","annotations":{"readOnlyHint":true,"destructiveHint":true,"idempotentHint":false}},{"name":"another"}]}}`
 	handler := newHandler()
 	w := postForm(t, handler, url.Values{"payload": {source}})
 	snapshot := reportSnapshot(t, w.Body.String())
 	var p payload
-	if err := json.Unmarshal([]byte(snapshot), &p); err != nil || p.Server != server || p.Fetched != fetched || len(p.Tools) != 1 {
+	if err := json.Unmarshal([]byte(snapshot), &p); err != nil || p.Server != server || p.Fetched != fetched || len(p.Tools) != 2 {
 		t.Fatalf("invalid report snapshot: %s (%v)", snapshot, err)
 	}
 	if p.Tools[0].Title == nil || *p.Tools[0].Title != `A "quoted" <title>` {
 		t.Fatal("snapshot did not preserve escaped content")
 	}
-	if p.Tools[0].Description != description || !strings.Contains(w.Body.String(), "<p>"+html.EscapeString(description)+"</p>") || strings.Contains(w.Body.String(), "<script>alert(1)</script>") {
+	if p.Tools[0].Description != description || !strings.Contains(w.Body.String(), `<p class="description">`+html.EscapeString(description)+"</p>") || strings.Contains(w.Body.String(), "<script>alert(1)</script>") {
 		t.Fatal("description was lost or rendered as HTML")
 	}
 	for _, fail := range []string{"true", "false"} {
 		t.Run("gist_failure="+fail, func(t *testing.T) {
 			t.Setenv("MCPHINTS_SMOKE_FAIL", fail)
 			w := postForm(t, handler, url.Values{
-				"action": {"gist"}, "payload": {snapshot},
+				"action": {"gist"}, "payload": {snapshot}, "sort": {"name"},
 				"server": {"https://should-not-fetch.example/mcp"},
 			})
 			if _, err := os.Stat(filepath.Join(dir, "fetched")); !os.IsNotExist(err) {
@@ -222,8 +226,8 @@ printf 'https://gist.github.com/example/snapshot\n'`,
 			}
 			for _, want := range []string{
 				"- **Server:** `" + server + "`", "- **Fetched:** " + fetched,
-				"| `read_only` | 🟢 claimed true | n/a — read-only | n/a — read-only | ⚠️ assumed true |",
-				"<summary>read_only — description</summary>", "<pre>" + html.EscapeString(description) + "</pre>",
+				"## Tools\n\n### `another`", "### `read_only`", "#### Description\n\n<p>" + strings.ReplaceAll(html.EscapeString(description), "\n", "<br>\n") + "</p>",
+				"#### Annotations\n\n- `readOnlyHint`: 🟢 claimed true\n- `destructiveHint`: n/a — read-only\n- `idempotentHint`: n/a — read-only\n- `openWorldHint`: ⚠️ assumed true",
 			} {
 				if !strings.Contains(string(md), want) {
 					t.Errorf("published report missing %q: %s", want, md)
@@ -235,13 +239,62 @@ printf 'https://gist.github.com/example/snapshot\n'`,
 				t.Errorf("gist arguments = %q (%v), want %q", args, err, wantArgs)
 			}
 			if fail == "true" {
-				if !strings.Contains(w.Body.String(), "gist refused") || reportSnapshot(t, w.Body.String()) != snapshot {
+				if !strings.Contains(w.Body.String(), "gist refused") || reportSnapshot(t, w.Body.String()) != snapshot || !strings.Contains(w.Body.String(), `<option value="name" selected>`) {
 					t.Fatal("failed publish did not preserve the error and snapshot for retry")
 				}
 			} else if !strings.Contains(w.Body.String(), `href="https://gist.github.com/example/snapshot"`) {
 				t.Fatalf("missing published gist link: %s", w.Body.String())
 			}
 		})
+	}
+}
+
+func TestSortSnapshot(t *testing.T) {
+	// No executables: sorting must never fetch or publish.
+	t.Setenv("PATH", t.TempDir())
+	const source = `{"server":"https://example.test/mcp","fetched":"2020-01-02T03:04:05Z","tools":[
+		{"name":"z_missing"},
+		{"name":"b_safe","annotations":{"readOnlyHint":false,"destructiveHint":false,"idempotentHint":true,"openWorldHint":false}},
+		{"name":"c_risky","annotations":{"readOnlyHint":false,"destructiveHint":true,"idempotentHint":false,"openWorldHint":true}},
+		{"name":"a_readonly","annotations":{"readOnlyHint":true}}
+	]}`
+	handler := newHandler()
+	for _, tc := range []struct {
+		key     string
+		reverse bool
+		want    string
+	}{
+		{"", false, "z_missing b_safe c_risky a_readonly"},
+		{"", true, "a_readonly c_risky b_safe z_missing"},
+		{"name", false, "a_readonly b_safe c_risky z_missing"},
+		{"name", true, "z_missing c_risky b_safe a_readonly"},
+		{"readOnlyHint", false, "z_missing b_safe c_risky a_readonly"},
+		{"readOnlyHint", true, "a_readonly z_missing b_safe c_risky"},
+		{"destructiveHint", false, "b_safe z_missing c_risky a_readonly"},
+		{"destructiveHint", true, "z_missing c_risky b_safe a_readonly"},
+		{"idempotentHint", false, "z_missing c_risky b_safe a_readonly"},
+		{"idempotentHint", true, "b_safe z_missing c_risky a_readonly"},
+		{"openWorldHint", false, "b_safe z_missing c_risky a_readonly"},
+		{"openWorldHint", true, "z_missing c_risky a_readonly b_safe"},
+	} {
+		form := url.Values{"payload": {source}, "sort": {tc.key}, "server": {"https://should-not-fetch.example/mcp"}}
+		if tc.reverse {
+			form.Set("reverse", "1")
+		}
+		w := postForm(t, handler, form)
+		var names []string
+		for _, heading := range regexp.MustCompile(`<h3>([^<]+)</h3>`).FindAllStringSubmatch(w.Body.String(), -1) {
+			names = append(names, heading[1])
+		}
+		if strings.Join(names, " ") != tc.want {
+			t.Errorf("sort %q, reverse %v: got %v, want %s", tc.key, tc.reverse, names, tc.want)
+		}
+		if strings.Contains(w.Body.String(), `<p class="err">`) || !strings.Contains(w.Body.String(), "fetched 2020-01-02T03:04:05Z") {
+			t.Fatalf("sorting lost the report: %s", w.Body.String())
+		}
+		if checked := strings.Contains(w.Body.String(), `name="reverse" value="1" checked`); checked != tc.reverse {
+			t.Error("reverse selection was not preserved")
+		}
 	}
 }
 

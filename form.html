@@ -10,13 +10,15 @@
   textarea { width: 100%; height: 10rem; font: 13px/1.4 ui-monospace, monospace; padding: .5rem; box-sizing: border-box; }
   button { font: inherit; padding: .4rem 1.2rem; margin: .5rem .5rem 0 0; }
   button:disabled { opacity: .6; cursor: wait; }
-  table { border-collapse: collapse; width: 100%; margin-top: 1.5rem; }
-  th, td { border: 1px solid #ddd; padding: .45rem .6rem; text-align: left; vertical-align: top; font-size: .9rem; }
-  th { background: #f5f5f5; }
-  td:first-child { font-family: ui-monospace, monospace; }
-  .description { font: .85rem/1.5 system-ui, sans-serif; margin-top: .35rem; }
-  .description summary { cursor: pointer; color: #444; }
-  .description p { white-space: pre-wrap; max-width: 24rem; margin: .4rem 0; }
+  h2 { font-size: 1.2rem; }
+  .tool { border-top: 1px solid #ddd; padding: 1rem 0; }
+  .tool h3 { font: 600 1.1rem/1.5 ui-monospace, monospace; margin: 0 0 .5rem; }
+  .tool h4 { font-size: 1rem; margin: 1rem 0 .3rem; }
+  .description { white-space: pre-wrap; margin: .3rem 0; }
+  .annotations { padding-left: 1.5rem; }
+  .annotations li { margin: .3rem 0; }
+  .sort-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-top: 1rem; }
+  select { font: inherit; padding: .25rem; }
   .b { display: inline-block; padding: .1rem .5rem; border-radius: .8rem; font-size: .8rem; white-space: nowrap; }
   .safe  { background: #dcf5dc; color: #145214; }        /* declared, safe value */
   .risk  { background: #fadcdc; color: #7a1212; }        /* declared, risky value */
@@ -36,7 +38,7 @@
 every hint a server does <em>not</em> declare must be assumed at its conservative default &mdash;
 i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
 
-<form method="post" action="/" hx-post="/" hx-target="#result" hx-select="#result" hx-swap="outerHTML" hx-disabled-elt="button">
+<form method="post" action="/" hx-post="/" hx-target="#result" hx-select="#result" hx-swap="outerHTML" hx-disabled-elt="button, #result select, #result input[type=checkbox]">
   <p class="hint">Fetch straight from a server &mdash; an <code>http(s)://</code> URL (OAuth handled by the
   inspector; first use may open a browser to authorise) or a stdio command:</p>
   <input name="server" value="{{.ServerInput}}" list="known-servers"
@@ -59,24 +61,38 @@ i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
 {{if .Server}}<p><strong>Server:</strong> <code>{{.Server}}</code>{{if .Fetched}} &middot; fetched {{.Fetched}}{{end}}</p>{{end}}
 {{if .GistURL}}<p class="note">Published as an unlisted gist (visible to anyone with the URL): <a href="{{.GistURL}}">{{.GistURL}}</a></p>{{end}}
 {{if .GistErr}}<p class="err">{{.GistErr}}</p>{{end}}
+<form method="post" action="/" hx-post="/" hx-target="#result" hx-select="#result" hx-swap="outerHTML" hx-disabled-elt="button, #result select, #result input[type=checkbox]">
+  <input type="hidden" name="payload" value="{{.Snapshot}}">
 {{if .Rows}}
-<table>
-  <tr><th>Tool</th><th>readOnlyHint</th><th>destructiveHint</th><th>idempotentHint</th><th>openWorldHint</th></tr>
+<div class="sort-controls">
+  <label>Sort by <select name="sort" onchange="this.form.requestSubmit()">
+    <option value="">Server order</option>
+    <option value="name" {{if eq .Sort "name"}}selected{{end}}>Tool name</option>
+    {{range .HintTypes}}<option value="{{.Name}}" {{if eq $.Sort .Name}}selected{{end}}>{{.Name}}</option>{{end}}
+  </select></label>
+  <label><input type="checkbox" name="reverse" value="1" {{if .Reverse}}checked{{end}} onchange="this.form.requestSubmit()"> Reverse</label>
+</div>
+<p class="hint">Hints sort false first (true first when reversed). Missing hints use their displayed defaults; n/a stays last.</p>
+<h2>Tools</h2>
   {{range .Rows}}
-  <tr>
-    <td>{{.Name}}{{if .None}}<br><span class="b assumed">no annotations at all</span>{{end}}{{if .Description}}<details class="description"><summary>Description</summary><p>{{.Description}}</p></details>{{end}}</td>
+  <section class="tool">
+    <h3>{{.Name}}</h3>
+    {{if .Description}}<h4>Description</h4><p class="description">{{.Description}}</p>{{end}}
+    <h4>Annotations</h4>
+    {{if .None}}<p class="hint">No annotations declared.</p>{{end}}
+    <ul class="annotations">
     {{range .Hints}}
-    <td>
+    <li><code>{{.Name}}</code>:
       {{if .Moot}}<span class="b moot">n/a &mdash; read-only</span>
       {{else if not .Declared}}<span class="b assumed">assumed {{.Value}}</span>
       {{else if .Risky}}<span class="b risk">claimed {{.Value}}</span>
       {{else}}<span class="b safe">claimed {{.Value}}</span>
       {{end}}
-    </td>
+    </li>
     {{end}}
-  </tr>
+    </ul>
+  </section>
   {{end}}
-</table>
 
 <p class="legend">
   <span class="b safe">claimed</span> server claims the safer value (unverified) &nbsp;
@@ -93,13 +109,10 @@ clients must not make security-critical decisions based on them. Treat a declare
 {{end}}
 
 {{if not .GistURL}}
-<form method="post" action="/" hx-post="/" hx-target="#result" hx-select="#result" hx-swap="outerHTML" hx-disabled-elt="button">
-  <input type="hidden" name="action" value="gist">
-  <input type="hidden" name="payload" value="{{.Snapshot}}">
-  <button>Publish this report</button>
-  <span class="spinner">publishing&hellip;</span>
+  <button name="action" value="gist">Publish this report</button>
   <p class="hint">Creates an unlisted GitHub gist, visible to anyone with the link.</p>
-</form>
 {{end}}
+  <span class="spinner">working&hellip;</span>
+</form>
 {{end}}
 </div>

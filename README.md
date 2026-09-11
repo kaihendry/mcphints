@@ -27,9 +27,13 @@ Then open http://localhost:8321, and either:
   `result.tools`, or a bare array. Empty lists display “No tools returned”.
 
 For read-only tools, both destructive and idempotent hints display as “n/a”.
-Expand **Description** beneath a tool name to read the server's description,
-when provided. Descriptions also accompany published reports. Long URLs and
-description text wrap within the page.
+Each tool has its own heading, description (when provided), and labeled
+annotation list. Descriptions stay visible for reading and copying. Published
+reports use the same hierarchy. Long URLs and description text wrap within
+the page. **Sort by** orders tools by name or any hint, and **Reverse** flips
+the order. Hints sort false first using the displayed defaults when missing;
+read-only “n/a” values stay last. Sorting reuses the snapshot, and publishing
+preserves the displayed order.
 Inspector diagnostics, including the authorization URL, appear immediately in
 the terminal if you need to open the URL yourself.
 
@@ -69,7 +73,7 @@ MCP_INSPECTOR_OAUTH_STATE_PATH="$(mktemp -d)/oauth.json" go run .
 1. Open http://localhost:8321, enter `https://api.fastmail.com/mcp`, and click
    **Analyse**.
 2. Confirm the authorization page opens. Wait more than 15 seconds before
-   completing authorization, then confirm the tool table appears. Complete
+   completing authorization, then confirm the tool list appears. Complete
    this within the app's five-minute fetch timeout.
 3. Click **Analyse** again and confirm tools appear using cached credentials,
    without another authorization prompt. Keep the same app process running
