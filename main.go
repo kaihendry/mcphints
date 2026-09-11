@@ -21,7 +21,7 @@ import (
 	"time"
 )
 
-//go:embed form.html
+//go:embed form.html trifecta.svg
 var tmplFS embed.FS
 
 type Annotations struct {
@@ -110,7 +110,7 @@ func sortRows(rows []Row, key string, reverse bool) {
 		if h.Moot {
 			return 2 // n/a stays last in either direction
 		}
-		if h.Value != reverse {
+		if h.Risky == reverse {
 			return 1
 		}
 		return 0
@@ -271,7 +271,7 @@ func publishGist(md, server string) (string, error) {
 }
 
 func newHandler() http.Handler {
-	tmpl := template.Must(template.ParseFS(tmplFS, "form.html"))
+	tmpl := template.Must(template.ParseFS(tmplFS, "form.html", "trifecta.svg"))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// This server execs commands; refuse cross-origin form posts.
 		if o := r.Header.Get("Origin"); o != "" && o != "http://localhost:8321" && o != "http://127.0.0.1:8321" {

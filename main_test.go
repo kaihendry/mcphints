@@ -211,9 +211,9 @@ printf 'https://gist.github.com/example/snapshot\n'`,
 		t.Fatal("description was lost or rendered as HTML")
 	}
 	contents := regexp.MustCompile(`(?s)<nav aria-label="Tool contents">(.*?)</nav>`).FindStringSubmatch(w.Body.String())
-	if len(contents) != 2 || !strings.Contains(contents[1], "readOnlyHint: claimed true") ||
-		!strings.Contains(contents[1], "No hints declared.") || strings.Contains(contents[1], "destructiveHint") ||
-		strings.Contains(contents[1], "idempotentHint") || strings.Contains(contents[1], "openWorldHint") {
+	if len(contents) != 2 || !strings.Contains(contents[1], `class="b safe">claimed true`) ||
+		strings.Count(contents[1], ">claimed ") != 1 || strings.Count(contents[1], ">not declared<") != 5 ||
+		strings.Count(contents[1], ">n/a<") != 2 {
 		t.Fatalf("contents must summarize applicable claims only: %v", contents)
 	}
 	for _, fail := range []string{"true", "false"} {
@@ -277,12 +277,12 @@ func TestSortSnapshot(t *testing.T) {
 		{"name", true, "z_missing c_risky b_safe a_readonly"},
 		{"readOnlyHint", false, "z_missing b_safe c_risky a_readonly"},
 		{"readOnlyHint", true, "a_readonly z_missing b_safe c_risky"},
-		{"destructiveHint", false, "b_safe z_missing c_risky a_readonly"},
-		{"destructiveHint", true, "z_missing c_risky b_safe a_readonly"},
+		{"destructiveHint", false, "z_missing c_risky b_safe a_readonly"},
+		{"destructiveHint", true, "b_safe z_missing c_risky a_readonly"},
 		{"idempotentHint", false, "z_missing c_risky b_safe a_readonly"},
 		{"idempotentHint", true, "b_safe z_missing c_risky a_readonly"},
-		{"openWorldHint", false, "b_safe z_missing c_risky a_readonly"},
-		{"openWorldHint", true, "z_missing c_risky a_readonly b_safe"},
+		{"openWorldHint", false, "z_missing c_risky a_readonly b_safe"},
+		{"openWorldHint", true, "b_safe z_missing c_risky a_readonly"},
 	} {
 		form := url.Values{"payload": {source}, "sort": {tc.key}, "server": {"https://should-not-fetch.example/mcp"}}
 		if tc.reverse {

@@ -31,11 +31,15 @@ Each tool has its own heading, description (when provided), and labeled
 annotation list. Descriptions stay visible for reading and copying. Published
 reports use the same hierarchy. Long URLs and description text wrap within
 the page. **Sort by** orders tools by name or any hint, and **Reverse** flips
-the order. Hints sort false first using the displayed defaults when missing;
-read-only “n/a” values stay last. Sorting reuses the snapshot, and publishing
+the order. Hints sort higher-risk values first: `true` for destructive/open-world,
+`false` for read-only/idempotent, using the displayed defaults when missing.
+Read-only “n/a” values stay last. Sorting reuses the snapshot, and publishing
 preserves the displayed order. The **Tools** contents list links to each tool,
-summarizes its applicable claimed hints, and follows the same sort order.
+aligns its claimed hints in a responsive grid, and follows the same sort order.
 Published reports include the contents too.
+**Show lethal trifecta** reveals an SVG reviewer guide to private data access,
+untrusted content, and external communication across the agent's tools.
+The standalone vector artwork is in [trifecta.svg](trifecta.svg).
 Inspector diagnostics, including the authorization URL, appear immediately in
 the terminal if you need to open the URL yourself.
 

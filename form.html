@@ -12,8 +12,17 @@
   button:disabled { opacity: .6; cursor: wait; }
   h2 { font-size: 1.2rem; }
   h2, h3 { scroll-margin-top: 1rem; }
-  .contents { padding-left: 1.5rem; }
-  .contents li { margin: .5rem 0; }
+  .contents { list-style: none; padding: 0; }
+  .contents-head, .contents > li { display: grid; grid-template-columns: minmax(12rem, 2fr) repeat(4, minmax(0, 1fr)); gap: .5rem; align-items: start; }
+  .contents-head { font-size: .85rem; color: #666; }
+  .contents > li { padding: .6rem 0; border-top: 1px solid #eee; }
+  .hint-name { display: none; }
+  @media (max-width: 44rem) {
+    .contents-head { display: none; }
+    .contents > li { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .contents > li > a { grid-column: 1 / -1; }
+    .hint-name { display: block; font-size: .85rem; color: #666; }
+  }
   .tool { border-top: 1px solid #ddd; padding: 1rem 0; }
   .tool h3 { font: 600 1.1rem/1.5 ui-monospace, monospace; margin: 0 0 .5rem; }
   .tool h4 { font-size: 1rem; margin: 1rem 0 .3rem; }
@@ -32,6 +41,8 @@
   .legend { font-size: .85rem; color: #444; }
   .hint { font-size: .85rem; color: #666; margin: .3rem 0; }
   #result { overflow-wrap: anywhere; }
+  #trifecta { margin: 1rem 0; }
+  #trifecta svg { display: block; width: 100%; height: auto; }
   .spinner { display: none; color: #4a7ab5; }
   .htmx-request .spinner { display: inline; }
 </style>
@@ -40,6 +51,18 @@
 <p>Per the <a href="https://modelcontextprotocol.io/specification/2025-11-25/schema#toolannotations">MCP spec</a>,
 every hint a server does <em>not</em> declare must be assumed at its conservative default &mdash;
 i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
+
+<button type="button" aria-expanded="false" aria-controls="trifecta"
+        onclick="const panel = document.getElementById('trifecta'); panel.hidden = !panel.hidden;
+                 this.setAttribute('aria-expanded', String(!panel.hidden));
+                 this.textContent = panel.hidden ? 'Show lethal trifecta' : 'Hide lethal trifecta';">Show lethal trifecta</button>
+<figure id="trifecta" hidden>
+  {{template "trifecta.svg"}}
+  <figcaption class="hint">Review the capabilities available across the agent's tools: access to private data,
+  exposure to untrusted content, and a way to communicate externally. MCP hints alone cannot establish
+  whether this combination is present.
+  <a href="https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/">The lethal trifecta, by Simon Willison</a>.</figcaption>
+</figure>
 
 <form method="post" action="/" hx-post="/" hx-target="#result" hx-select="#result" hx-swap="outerHTML" hx-disabled-elt="button, #result select, #result input[type=checkbox]">
   <p class="hint">Fetch straight from a server &mdash; an <code>http(s)://</code> URL (OAuth handled by the
@@ -76,13 +99,21 @@ i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
   </select></label>
   <label><input type="checkbox" name="reverse" value="1" {{if .Reverse}}checked{{end}} onchange="this.form.requestSubmit()"> Reverse</label>
 </div>
-<p class="hint">Hints sort false first (true first when reversed). Missing hints use their displayed defaults; n/a stays last.</p>
+<p class="hint">Hints sort higher-risk values first: destructive/open-world true, read-only/idempotent false.
+Reverse puts lower-risk values first. Missing hints use their displayed defaults; n/a stays last.</p>
 <nav aria-label="Tool contents">
+  <div class="contents-head" aria-hidden="true"><span>Tool</span>{{range .HintTypes}}<code>{{.Name}}</code>{{end}}</div>
   <ul class="contents">
   {{range .Rows}}
     <li><a href="#{{.ID}}"><code>{{.Name}}</code></a>
-      {{range .Claims}}<span class="b {{if .Risky}}risk{{else}}safe{{end}}">{{.Name}}: claimed {{.Value}}</span>
-      {{else}}<span class="hint">No hints declared.</span>{{end}}
+      {{range .Hints}}
+      <span role="group" aria-label="{{.Name}}">
+        <code class="hint-name" aria-hidden="true">{{.Name}}</code>
+        {{if .Moot}}<span class="b moot">n/a</span>
+        {{else if not .Declared}}<span class="hint">not declared</span>
+        {{else}}<span class="b {{if .Risky}}risk{{else}}safe{{end}}">claimed {{.Value}}</span>{{end}}
+      </span>
+      {{end}}
     </li>
   {{end}}
   </ul>

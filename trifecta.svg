@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 1024" width="2048" height="1024"
+     role="img" aria-labelledby="trifecta-title trifecta-desc">
+  <title id="trifecta-title">The lethal trifecta</title>
+  <desc id="trifecta-desc">Three capabilities to review together: access to private data,
+  ability to externally communicate, and exposure to untrusted content.</desc>
+  <defs>
+    <linearGradient id="trifecta-private" x2="0" y2="1">
+      <stop stop-color="#ff9900"/>
+      <stop offset="1" stop-color="#ffe735"/>
+    </linearGradient>
+    <linearGradient id="trifecta-communicate" x2="0" y2="1">
+      <stop stop-color="#61d92b"/>
+      <stop offset="1" stop-color="#16b800"/>
+    </linearGradient>
+    <linearGradient id="trifecta-untrusted" x2="0" y2="1">
+      <stop stop-color="#eb58a9"/>
+      <stop offset="1" stop-color="#c6247b"/>
+    </linearGradient>
+  </defs>
+  <rect width="2048" height="1024" fill="#000"/>
+  <g font-family="Arial, Helvetica, sans-serif" font-weight="700" text-anchor="middle">
+    <text x="1024" y="180" font-size="112" fill="#fff">The lethal trifecta</text>
+    <ellipse cx="1024" cy="427" rx="283" ry="178" fill="url(#trifecta-private)"/>
+    <ellipse cx="710" cy="780" rx="283" ry="178" fill="url(#trifecta-communicate)"/>
+    <ellipse cx="1320" cy="780" rx="283" ry="178" fill="url(#trifecta-untrusted)"/>
+    <g fill="#000">
+      <text x="1024" y="407" font-size="54">Access to</text>
+      <text x="1024" y="485" font-size="64">Private Data</text>
+      <text x="710" y="728" font-size="48">Ability to</text>
+      <text x="710" y="795" font-size="56">Externally</text>
+      <text x="710" y="862" font-size="56">Communicate</text>
+      <text x="1320" y="762" font-size="48">Exposure to</text>
+      <text x="1320" y="827" font-size="56">Untrusted Content</text>
+    </g>
+  </g>
+</svg>
