@@ -1,111 +1,27 @@
 # MCP hints
 
-Paste an MCP server's `tools/list` JSON (or point it at a live server) and see
-which [tool annotations](https://modelcontextprotocol.io/specification/2026-07-28/schema#toolannotations) —
-`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` — it
-actually declares, versus what the spec's conservative defaults assume when a
-hint is missing.
-
-Annotations are self-declared, unverified hints, not enforced controls. This
-tool exists to make that gap visible before you decide which MCP tool actions
-to allow.
+Inspect an MCP server's tools, descriptions, parameters, and
+[annotation hints](https://modelcontextprotocol.io/specification/2026-07-28/schema#toolannotations).
+Sort by name or hint to help review what the server claims. Hints are
+self-declared, not enforced controls; missing hints use conservative defaults.
 
 [![Demo](https://s.natalian.org/2026-07-20/mcphintthumb.png)](https://youtu.be/SvhuBZY4Fu0)
 
 ## Run
 
-```
+```sh
 go run .
 ```
 
-Then open http://localhost:8321, and either:
+Open http://localhost:8321 and enter an MCP server URL or stdio command,
+or paste `tools/list` JSON.
 
-- give it an `http(s)://` MCP server URL or a stdio command, and it fetches
-  `tools/list` for you — OAuth is handled by the MCP inspector, which opens a
-  browser on first use and caches the token in `~/.mcp-inspector/`, or
-- paste `tools/list` JSON directly: a `tools` object, a JSON-RPC response with
-  `result.tools`, or a bare array. Empty lists display “No tools returned”.
+Fetching from a server requires Node.js (`npx`). The MCP Inspector handles
+OAuth and opens your browser when authorization is needed.
 
-For read-only tools, both destructive and idempotent hints display as “n/a”.
-Each tool has its own heading, description (when provided), and labeled
-annotation list. Friendly titles appear beneath the copyable tool name, preferring
-`title` over `annotations.title`. Descriptions stay visible and render Markdown
-using Goldmark. Raw HTML and dangerous links are disabled; images appear as alt
-text, so viewing a description does not fetch remote images.
-
-**Parameters** lists top-level properties, types, required/optional status,
-descriptions, allowed values, and defaults. Expand **Input schema** for the full
-constraints and references; this summary is not a schema validator. **Output
-schema**, **Tool metadata**, and **Raw tool JSON** are expandable too. The snapshot
-preserves unknown fields, including extensions and annotations.
-
-Reports show pagination and cache hints when supplied: `nextCursor` marks a
-potentially incomplete list; `ttlMs` and `cacheScope` describe caching, not gist
-visibility. **Report metadata** includes the original response fields. These
-details do not trigger additional requests or automatic refreshes.
-
-Published reports use the same hierarchy. Long URLs and description text wrap within
-the page. **Sort by** orders tools by name or any hint, and **Reverse** flips
-the order. Hints sort higher-risk values first: `true` for destructive/open-world,
-`false` for read-only/idempotent, using the displayed defaults when missing.
-Read-only “n/a” values stay last. Sorting reuses the snapshot, and publishing
-preserves the displayed order. The **Tools** contents list links to each tool,
-aligns its claimed hints in a responsive grid, and follows the same sort order.
-Published reports include the contents too.
-**Show lethal trifecta** reveals an SVG reviewer guide to private data access,
-untrusted content, and external communication across the agent's tools.
-The standalone vector artwork is in [trifecta.svg](trifecta.svg).
-Inspector diagnostics, including the authorization URL, appear immediately in
-the terminal if you need to open the URL yourself.
-
-Use **Publish this report** beneath the results to publish that snapshot as an
-unlisted GitHub gist via `gh`, preserving its server and fetched timestamp
-without fetching again. Gists are visible to anyone with the URL, not
-access-controlled. Buttons are disabled while fetching or publishing.
-
-## Smoke tests
-
-Run the automated smoke test and static checks:
-
-```sh
-go test ./...
-go vet ./...
-```
-
-The tests POST to the real handler with fake `npx` and `gh` commands on `PATH`.
-They check missing and explicit annotations, read-only handling, fetched metadata, the
-Inspector arguments and OAuth environment setting, and stderr on success and
-failure. They also cover JSON parsing and publishing the displayed snapshot,
-including a failed publish and retry without fetching again, metadata preservation,
-title precedence, parameter summaries, and safe Markdown rendering.
-They need Go and `/bin/sh`; no Node, network, browser, or credentials.
-This covers our integration with Inspector, not a real OAuth exchange or
-browser-side HTMX behavior.
-
-GitHub Actions runs `go test ./...` and `go vet ./...` on every push and pull
-request, using the Go version from `go.mod`.
-
-Before changing `fetchTools` or updating Inspector, also check Fastmail OAuth
-manually. Start the app with a fresh, isolated token store:
-
-```sh
-MCP_INSPECTOR_OAUTH_STATE_PATH="$(mktemp -d)/oauth.json" go run .
-```
-
-1. Open http://localhost:8321, enter `https://api.fastmail.com/mcp`, and click
-   **Analyse**.
-2. Confirm the authorization page opens. Wait more than 15 seconds before
-   completing authorization, then confirm the tool list appears. Complete
-   this within the app's five-minute fetch timeout.
-3. Click **Analyse** again and confirm tools appear using cached credentials,
-   without another authorization prompt. Keep the same app process running
-   so it uses the same temporary token store.
-
-The [Inspector storage override](https://github.com/modelcontextprotocol/inspector/blob/main/clients/cli/README.md#stored-auth-web--cli-handoff)
-keeps this check separate from your usual cached credentials. The automated
-test uses a fake Inspector, so repeat this manual check when changing the
-Inspector version, including updates picked up by the floating `@2` version.
+**Publish this report** shares the results as an unlisted GitHub gist using
+an authenticated `gh` CLI. Anyone with the gist URL can read it.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+[MIT](LICENSE).
