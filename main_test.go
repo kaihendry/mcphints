@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"html"
 	"net/http"
 	"net/http/httptest"
@@ -37,20 +38,22 @@ printf '%s\n' '{"tools":[
 	invocation := filepath.Join(dir, "invocation")
 	t.Setenv("MCPHINTS_SMOKE_INVOCATION", invocation)
 	handler := newHandler()
+	stderr, err := os.Create(filepath.Join(dir, "stderr"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalStderr := os.Stderr
+	os.Stderr = stderr
+	t.Cleanup(func() {
+		os.Stderr = originalStderr
+		stderr.Close()
+	})
 
 	for _, fail := range []string{"false", "true"} {
 		t.Run("inspector_failure="+fail, func(t *testing.T) {
 			t.Setenv("MCPHINTS_SMOKE_FAIL", fail)
 			const server = "https://api.fastmail.com/mcp"
-			form := url.Values{"server": {server}}
-			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(form.Encode()))
-			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-			req.Header.Set("Origin", "http://localhost:8321")
-			w := httptest.NewRecorder()
-			handler.ServeHTTP(w, req)
-			if w.Code != http.StatusOK {
-				t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
-			}
+			w := postForm(t, handler, url.Values{"server": {server}})
 
 			// Protect the CLI contract that permits a browser OAuth round-trip
 			// with pipes and avoids Inspector's default 15-second connect timeout.
@@ -68,6 +71,10 @@ printf '%s\n' '{"tools":[
 			}
 
 			body := w.Body.String()
+			terminal, err := os.ReadFile(stderr.Name())
+			if err != nil || !strings.Contains(string(terminal), "OAuth diagnostic: https://auth.example.test/authorize") {
+				t.Errorf("Inspector diagnostic missing from terminal: %s (%v)", terminal, err)
+			}
 			if fail == "true" {
 				if !strings.Contains(body, `<p class="err">inspector failed:`) ||
 					!strings.Contains(body, "OAuth diagnostic: https://auth.example.test/authorize") {
@@ -98,7 +105,7 @@ printf '%s\n' '{"tools":[
 				hints []string
 			}{
 				{"unknown", []string{"assumed:assumed false", "assumed:assumed true", "assumed:assumed false", "assumed:assumed true"}},
-				{"read_only", []string{"safe:claimed true", "moot:n/a — read-only", "assumed:assumed false", "assumed:assumed true"}},
+				{"read_only", []string{"safe:claimed true", "moot:n/a — read-only", "moot:n/a — read-only", "assumed:assumed true"}},
 				{"annotated", []string{"risk:claimed false", "safe:claimed false", "safe:claimed true", "safe:claimed false"}},
 			}
 			if len(rows) != len(cases) {
@@ -123,4 +130,131 @@ printf '%s\n' '{"tools":[
 			}
 		})
 	}
+}
+
+func TestParse(t *testing.T) {
+	for _, tc := range []struct {
+		name, input string
+		tools       int
+		err         string
+	}{
+		{"object", `{"tools":[{"name":"one"}]}`, 1, ""},
+		{"array", ` [{"name":"one"}] `, 1, ""},
+		{"rpc", `{"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"one"}]}}`, 1, ""},
+		{"empty object", `{"tools":[]}`, 0, ""},
+		{"empty array", `[]`, 0, ""},
+		{"empty rpc", `{"result":{"tools":[]}}`, 0, ""},
+		{"malformed", `{"tools":`, 0, "invalid tools JSON: unexpected end"},
+		{"wrong hint type", `{"tools":[{"annotations":{"readOnlyHint":"true"}}]}`, 0, "annotations.readOnlyHint"},
+		{"wrong tools type", `{"tools":{}}`, 0, "cannot unmarshal object"},
+		{"missing tools", `{}`, 0, "no tools array found"},
+		{"null tools", `{"tools":null}`, 0, "no tools array found"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p, err := parse(tc.input)
+			if tc.err != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.err) {
+					t.Fatalf("error = %v, want %q", err, tc.err)
+				}
+				return
+			}
+			if err != nil || len(p.Tools) != tc.tools {
+				t.Fatalf("tools = %v, error = %v", p.Tools, err)
+			}
+			if tc.tools == 0 {
+				w := postForm(t, newHandler(), url.Values{"payload": {tc.input}})
+				if !strings.Contains(w.Body.String(), "No tools returned.") || strings.Contains(w.Body.String(), `<p class="err">`) {
+					t.Fatalf("empty list rendered incorrectly: %s", w.Body.String())
+				}
+			}
+		})
+	}
+}
+
+func TestPublishSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PATH", dir)
+	t.Setenv("MCPHINTS_SMOKE_DIR", dir)
+	for name, script := range map[string]string{
+		"npx": `printf 'unexpected fetch' > "$MCPHINTS_SMOKE_DIR/fetched"; exit 1`,
+		"gh": `printf '%s\n' "$@" > "$MCPHINTS_SMOKE_DIR/args"
+while IFS= read -r line || [ -n "$line" ]; do printf '%s\n' "$line"; done > "$MCPHINTS_SMOKE_DIR/report.md"
+if [ "$MCPHINTS_SMOKE_FAIL" = true ]; then printf 'gist refused' >&2; exit 1; fi
+printf 'https://gist.github.com/example/snapshot\n'`,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\nset -eu\n"+script+"\n"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const server = "https://api.fastmail.com/mcp"
+	const fetched = "2020-01-02T03:04:05Z"
+	const source = `{"result":{"server":"` + server + `","fetched":"` + fetched + `","tools":[{"name":"read_only","title":"A \"quoted\" <title>","annotations":{"readOnlyHint":true,"destructiveHint":true,"idempotentHint":false}}]}}`
+	handler := newHandler()
+	w := postForm(t, handler, url.Values{"payload": {source}})
+	snapshot := reportSnapshot(t, w.Body.String())
+	var p payload
+	if err := json.Unmarshal([]byte(snapshot), &p); err != nil || p.Server != server || p.Fetched != fetched || len(p.Tools) != 1 {
+		t.Fatalf("invalid report snapshot: %s (%v)", snapshot, err)
+	}
+	if p.Tools[0].Title == nil || *p.Tools[0].Title != `A "quoted" <title>` {
+		t.Fatal("snapshot did not preserve escaped content")
+	}
+	for _, fail := range []string{"true", "false"} {
+		t.Run("gist_failure="+fail, func(t *testing.T) {
+			t.Setenv("MCPHINTS_SMOKE_FAIL", fail)
+			w := postForm(t, handler, url.Values{
+				"action": {"gist"}, "payload": {snapshot},
+				"server": {"https://should-not-fetch.example/mcp"},
+			})
+			if _, err := os.Stat(filepath.Join(dir, "fetched")); !os.IsNotExist(err) {
+				t.Fatal("publishing invoked Inspector")
+			}
+			md, err := os.ReadFile(filepath.Join(dir, "report.md"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range []string{
+				"- **Server:** `" + server + "`", "- **Fetched:** " + fetched,
+				"| `read_only` | 🟢 claimed true | n/a — read-only | n/a — read-only | ⚠️ assumed true |",
+			} {
+				if !strings.Contains(string(md), want) {
+					t.Errorf("published report missing %q: %s", want, md)
+				}
+			}
+			args, err := os.ReadFile(filepath.Join(dir, "args"))
+			wantArgs := "gist\ncreate\n--filename\nmcp-hints.md\n--desc\nMCP tool annotation hints — " + server + "\n-\n"
+			if err != nil || string(args) != wantArgs {
+				t.Errorf("gist arguments = %q (%v), want %q", args, err, wantArgs)
+			}
+			if fail == "true" {
+				if !strings.Contains(w.Body.String(), "gist refused") || reportSnapshot(t, w.Body.String()) != snapshot {
+					t.Fatal("failed publish did not preserve the error and snapshot for retry")
+				}
+			} else if !strings.Contains(w.Body.String(), `href="https://gist.github.com/example/snapshot"`) {
+				t.Fatalf("missing published gist link: %s", w.Body.String())
+			}
+		})
+	}
+}
+
+func postForm(t *testing.T, handler http.Handler, form url.Values) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", "http://localhost:8321")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	return w
+}
+
+func reportSnapshot(t *testing.T, body string) string {
+	t.Helper()
+	match := regexp.MustCompile(`<input type="hidden" name="payload" value="([^"]*)">`).FindStringSubmatch(body)
+	if len(match) != 2 {
+		t.Fatalf("missing report snapshot: %s", body)
+	}
+	return html.UnescapeString(match[1])
 }

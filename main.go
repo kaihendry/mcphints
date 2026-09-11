@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -39,7 +40,7 @@ type Hint struct {
 	Value    bool
 	Declared bool
 	Risky    bool // holds the worst-case value (which is always the default)
-	Moot     bool // destructiveHint when the tool is read-only
+	Moot     bool // destructiveHint and idempotentHint when the tool is read-only
 }
 
 type Row struct {
@@ -68,7 +69,7 @@ func buildRow(t Tool) Row {
 		r.Hints[i] = h
 	}
 	if r.Hints[0].Declared && r.Hints[0].Value {
-		r.Hints[1].Moot = true // destructiveHint only applies when not read-only
+		r.Hints[1].Moot, r.Hints[2].Moot = true, true
 	}
 	return r
 }
@@ -80,14 +81,27 @@ type payload struct {
 }
 
 func parse(s string) (payload, error) {
-	var p payload
-	if err := json.Unmarshal([]byte(s), &p); err == nil && len(p.Tools) > 0 {
-		return p, nil
+	var response struct {
+		payload
+		Result *payload `json:"result"`
 	}
-	if err := json.Unmarshal([]byte(s), &p.Tools); err == nil && len(p.Tools) > 0 {
-		return p, nil
+	var err error
+	if strings.HasPrefix(strings.TrimSpace(s), "[") {
+		err = json.Unmarshal([]byte(s), &response.Tools)
+	} else {
+		err = json.Unmarshal([]byte(s), &response)
 	}
-	return p, fmt.Errorf(`no tools found: paste the tools/list result (an object with a "tools" array, or a bare array of tools)`)
+	if err != nil {
+		return payload{}, fmt.Errorf("invalid tools JSON: %w", err)
+	}
+	p := response.payload
+	if response.Result != nil {
+		p = *response.Result
+	}
+	if p.Tools == nil {
+		return p, fmt.Errorf(`no tools array found: paste {"tools":[...]}, {"result":{"tools":[...]}}, or a bare array`)
+	}
+	return p, nil
 }
 
 func cell(h Hint) string {
@@ -149,10 +163,11 @@ func fetchTools(server string) (string, error) {
 	cmd := exec.CommandContext(ctx, "npx", args...)
 	// We exec with pipes, so the inspector sees no TTY and would refuse to start
 	// interactive OAuth. This says a human *is* here — go ahead and open the
-	// browser. (The consent URL also lands in stderr, so it surfaces on failure.)
+	// browser. Tee stderr so the consent URL is visible while waiting and is
+	// still included in the error if the command fails.
 	cmd.Env = append(os.Environ(), "MCP_AUTO_OPEN_ENABLED=true")
 	var out, errb bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &errb
+	cmd.Stdout, cmd.Stderr = &out, io.MultiWriter(&errb, os.Stderr)
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("inspector failed: %v: %s", err, strings.TrimSpace(errb.String()))
 	}
@@ -184,6 +199,7 @@ func newHandler() http.Handler {
 		}
 		var data struct {
 			Payload     string
+			Snapshot    string
 			ServerInput string
 			Rows        []Row
 			Err         string
@@ -196,36 +212,41 @@ func newHandler() http.Handler {
 		if r.Method == http.MethodPost {
 			data.Payload = r.FormValue("payload")
 			data.ServerInput = strings.TrimSpace(r.FormValue("server"))
-			if data.ServerInput != "" {
-				if raw, err := fetchTools(data.ServerInput); err != nil {
-					data.Err = err.Error()
-				} else if p, err := parse(raw); err != nil {
-					data.Err = err.Error()
-				} else {
+			publishing := r.FormValue("action") == "gist"
+			fetching := data.ServerInput != "" && !publishing
+			raw := data.Payload
+			var p payload
+			var snapshot []byte
+			var err error
+			if fetching {
+				raw, err = fetchTools(data.ServerInput)
+			}
+			if err == nil {
+				p, err = parse(raw)
+			}
+			if err == nil {
+				if fetching {
 					p.Server = data.ServerInput
 					p.Fetched = time.Now().UTC().Format(time.RFC3339)
-					if b, err := json.MarshalIndent(p, "", "  "); err == nil {
-						data.Payload = string(b)
-					}
 				}
+				snapshot, err = json.Marshal(p)
 			}
-			if data.Err == "" {
-				p, err := parse(data.Payload)
-				if err != nil {
-					data.Err = err.Error()
-				} else {
-					data.Server, data.Fetched = p.Server, p.Fetched
-					for _, t := range p.Tools {
-						data.Rows = append(data.Rows, buildRow(t))
-					}
-					data.Done = true
-					if r.FormValue("action") == "gist" {
-						url, err := publishGist(markdown(p.Server, p.Fetched, data.Rows), p.Server)
-						if err != nil {
-							data.GistErr = err.Error()
-						} else {
-							data.GistURL = url
-						}
+			if err != nil {
+				data.Err = err.Error()
+			} else {
+				data.Snapshot = string(snapshot)
+				if fetching {
+					data.Payload = data.Snapshot
+				}
+				data.Server, data.Fetched = p.Server, p.Fetched
+				for _, t := range p.Tools {
+					data.Rows = append(data.Rows, buildRow(t))
+				}
+				data.Done = true
+				if publishing {
+					data.GistURL, err = publishGist(markdown(p.Server, p.Fetched, data.Rows), p.Server)
+					if err != nil {
+						data.GistErr = err.Error()
 					}
 				}
 			}

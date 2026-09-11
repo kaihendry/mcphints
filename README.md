@@ -23,10 +23,17 @@ Then open http://localhost:8321, and either:
 - give it an `http(s)://` MCP server URL or a stdio command, and it fetches
   `tools/list` for you — OAuth is handled by the MCP inspector, which opens a
   browser on first use and caches the token in `~/.mcp-inspector/`, or
-- paste `tools/list` JSON directly.
+- paste `tools/list` JSON directly: a `tools` object, a JSON-RPC response with
+  `result.tools`, or a bare array. Empty lists display “No tools returned”.
 
-Results can also be published as an unlisted GitHub gist via `gh` — visible
-to anyone with the URL, not access-controlled.
+For read-only tools, both destructive and idempotent hints display as “n/a”.
+Inspector diagnostics, including the authorization URL, appear immediately in
+the terminal if you need to open the URL yourself.
+
+Use **Publish this report** beneath the results to publish that snapshot as an
+unlisted GitHub gist via `gh`, preserving its server and fetched timestamp
+without fetching again. Gists are visible to anyone with the URL, not
+access-controlled. Buttons are disabled while fetching or publishing.
 
 ## Smoke tests
 
@@ -37,12 +44,17 @@ go test ./...
 go vet ./...
 ```
 
-The test POSTs to the real handler with a fake `npx` on `PATH`. It checks
-missing and explicit annotations, read-only handling, fetched metadata, the
+The tests POST to the real handler with fake `npx` and `gh` commands on `PATH`.
+They check missing and explicit annotations, read-only handling, fetched metadata, the
 Inspector arguments and OAuth environment setting, and stderr on success and
-failure. It needs Go and `/bin/sh`; no Node, network, browser, or credentials.
+failure. They also cover JSON parsing and publishing the displayed snapshot,
+including a failed publish and retry without fetching again.
+They need Go and `/bin/sh`; no Node, network, browser, or credentials.
 This covers our integration with Inspector, not a real OAuth exchange or
 browser-side HTMX behavior.
+
+GitHub Actions runs `go test ./...` and `go vet ./...` on every push and pull
+request, using the Go version from `go.mod`.
 
 Before changing `fetchTools` or updating Inspector, also check Fastmail OAuth
 manually. Start the app with a fresh, isolated token store:

@@ -9,6 +9,7 @@
   input[name=server] { width: 100%; font: 13px/1.4 ui-monospace, monospace; padding: .5rem; box-sizing: border-box; }
   textarea { width: 100%; height: 10rem; font: 13px/1.4 ui-monospace, monospace; padding: .5rem; box-sizing: border-box; }
   button { font: inherit; padding: .4rem 1.2rem; margin: .5rem .5rem 0 0; }
+  button:disabled { opacity: .6; cursor: wait; }
   table { border-collapse: collapse; width: 100%; margin-top: 1.5rem; }
   th, td { border: 1px solid #ddd; padding: .45rem .6rem; text-align: left; font-size: .9rem; }
   th { background: #f5f5f5; }
@@ -22,8 +23,8 @@
   .note { background: #f0f4fa; border-left: 3px solid #4a7ab5; padding: .6rem .9rem; font-size: .9rem; }
   .legend { font-size: .85rem; color: #444; }
   .hint { font-size: .85rem; color: #666; margin: .3rem 0; }
-  #spinner { display: none; color: #4a7ab5; }
-  .htmx-request #spinner { display: inline; }
+  .spinner { display: none; color: #4a7ab5; }
+  .htmx-request .spinner { display: inline; }
 </style>
 
 <h1>MCP tool annotation hints</h1>
@@ -31,7 +32,7 @@
 every hint a server does <em>not</em> declare must be assumed at its conservative default &mdash;
 i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
 
-<form method="post" action="/" hx-post="/" hx-target="#result" hx-select="#result" hx-swap="outerHTML">
+<form method="post" action="/" hx-post="/" hx-target="#result" hx-select="#result" hx-swap="outerHTML" hx-disabled-elt="button">
   <p class="hint">Fetch straight from a server &mdash; an <code>http(s)://</code> URL (OAuth handled by the
   inspector; first use may open a browser to authorise) or a stdio command:</p>
   <input name="server" value="{{.ServerInput}}" list="known-servers"
@@ -41,11 +42,10 @@ i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
     <option value="https://gmailmcp.googleapis.com/mcp/v1">Gmail</option>
     <option value="uvx awslabs.aws-documentation-mcp-server@latest">AWS documentation (stdio)</option>
   </datalist>
-  <p class="hint">&hellip;or paste <code>tools/list</code> JSON here (an object with a <code>tools</code> array, or a bare array):</p>
+  <p class="hint">&hellip;or paste <code>tools/list</code> JSON here (a <code>tools</code> object, a JSON-RPC response, or a bare array):</p>
   <textarea name="payload" placeholder='{"tools":[{"name":"…","annotations":{"readOnlyHint":true}}]}'>{{.Payload}}</textarea><br>
   <button>Analyse</button>
-  <button name="action" value="gist">Analyse &amp; publish gist</button>
-  <span id="spinner">working&hellip; (a fetch can take ~30s; OAuth may open a browser tab)</span>
+  <span class="spinner">working&hellip; (a fetch can take ~30s; OAuth may open a browser tab)</span>
 </form>
 
 <div id="result">
@@ -55,6 +55,7 @@ i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
 {{if .Server}}<p><strong>Server:</strong> <code>{{.Server}}</code>{{if .Fetched}} &middot; fetched {{.Fetched}}{{end}}</p>{{end}}
 {{if .GistURL}}<p class="note">Published as an unlisted gist (visible to anyone with the URL): <a href="{{.GistURL}}">{{.GistURL}}</a></p>{{end}}
 {{if .GistErr}}<p class="err">{{.GistErr}}</p>{{end}}
+{{if .Rows}}
 <table>
   <tr><th>Tool</th><th>readOnlyHint</th><th>destructiveHint</th><th>idempotentHint</th><th>openWorldHint</th></tr>
   {{range .Rows}}
@@ -83,5 +84,18 @@ i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
 <em>hints</em> from the server and are not verified or enforced by the protocol. The spec says
 clients must not make security-critical decisions based on them. Treat a declared
 <code>readOnlyHint:&nbsp;true</code> as a vendor claim to record, not a control.</p>
+{{else}}
+<p>No tools returned.</p>
+{{end}}
+
+{{if not .GistURL}}
+<form method="post" action="/" hx-post="/" hx-target="#result" hx-select="#result" hx-swap="outerHTML" hx-disabled-elt="button">
+  <input type="hidden" name="action" value="gist">
+  <input type="hidden" name="payload" value="{{.Snapshot}}">
+  <button>Publish this report</button>
+  <span class="spinner">publishing&hellip;</span>
+  <p class="hint">Creates an unlisted GitHub gist, visible to anyone with the link.</p>
+</form>
+{{end}}
 {{end}}
 </div>
