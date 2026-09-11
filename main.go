@@ -1,6 +1,6 @@
 // hints: paste MCP tools/list JSON, see which tool annotations are declared
 // vs assumed from the spec's conservative defaults.
-// https://modelcontextprotocol.io/specification/2025-11-25/schema#toolannotations
+// https://modelcontextprotocol.io/specification/2026-07-28/schema#toolannotations
 package main
 
 import (
@@ -33,10 +33,14 @@ type Annotations struct {
 }
 
 type Tool struct {
-	Name        string       `json:"name"`
-	Title       *string      `json:"title,omitempty"`
-	Description string       `json:"description,omitempty"`
-	Annotations *Annotations `json:"annotations"`
+	Name         string          `json:"name"`
+	Title        *string         `json:"title,omitempty"`
+	Description  string          `json:"description,omitempty"`
+	Annotations  *Annotations    `json:"annotations"`
+	InputSchema  json.RawMessage `json:"inputSchema,omitempty"`
+	OutputSchema json.RawMessage `json:"outputSchema,omitempty"`
+	Meta         json.RawMessage `json:"_meta,omitempty"`
+	Raw          json.RawMessage `json:"-"`
 }
 
 type Hint struct {
@@ -48,11 +52,10 @@ type Hint struct {
 }
 
 type Row struct {
-	ID          string
-	Name        string
-	Description string
-	None        bool    // no annotations declared at all
-	Hints       [4]Hint // readOnly, destructive, idempotent, openWorld
+	Tool
+	ID    string
+	None  bool    // no annotations declared at all
+	Hints [4]Hint // readOnly, destructive, idempotent, openWorld
 }
 
 func (r Row) Claims() []Hint {
@@ -74,7 +77,7 @@ var defaults = [4]Hint{
 }
 
 func buildRow(t Tool, index int) Row {
-	r := Row{ID: fmt.Sprintf("tool-%d", index), Name: t.Name, Description: t.Description, None: t.Annotations == nil}
+	r := Row{Tool: t, ID: fmt.Sprintf("tool-%d", index), None: t.Annotations == nil}
 	var ptrs [4]*bool
 	if t.Annotations != nil {
 		a := t.Annotations
@@ -128,28 +131,35 @@ func sortRows(rows []Row, key string, reverse bool) {
 }
 
 type payload struct {
-	Server  string `json:"server"`
-	Fetched string `json:"fetched"`
-	Tools   []Tool `json:"tools"`
+	Server     string                     `json:"server"`
+	Fetched    string                     `json:"fetched"`
+	Tools      []Tool                     `json:"tools"`
+	NextCursor string                     `json:"nextCursor,omitempty"`
+	TTLMS      *json.Number               `json:"ttlMs,omitempty"`
+	CacheScope string                     `json:"cacheScope,omitempty"`
+	Fields     map[string]json.RawMessage `json:"-"`
 }
 
 func parse(s string) (payload, error) {
-	var response struct {
-		payload
-		Result *payload `json:"result"`
-	}
-	var err error
+	raw := []byte(s)
 	if strings.HasPrefix(strings.TrimSpace(s), "[") {
-		err = json.Unmarshal([]byte(s), &response.Tools)
-	} else {
-		err = json.Unmarshal([]byte(s), &response)
+		raw = []byte(`{"tools":` + s + `}`)
 	}
-	if err != nil {
+	var response struct {
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal(raw, &response); err != nil {
 		return payload{}, fmt.Errorf("invalid tools JSON: %w", err)
 	}
-	p := response.payload
-	if response.Result != nil {
-		p = *response.Result
+	if len(response.Result) > 0 && string(response.Result) != "null" {
+		raw = response.Result
+	}
+	var p payload
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return p, fmt.Errorf("invalid tools JSON: %w", err)
+	}
+	if err := json.Unmarshal(raw, &p.Fields); err != nil {
+		return p, fmt.Errorf("invalid tools JSON: %w", err)
 	}
 	if p.Tools == nil {
 		return p, fmt.Errorf(`no tools array found: paste {"tools":[...]}, {"result":{"tools":[...]}}, or a bare array`)
@@ -170,16 +180,28 @@ func cell(h Hint) string {
 	}
 }
 
-func markdown(server, fetched string, rows []Row) string {
+func markdown(p payload, rows []Row) string {
 	var b strings.Builder
 	b.WriteString("# MCP tool annotation hints\n\n")
-	if server != "" {
-		fmt.Fprintf(&b, "- **Server:** `%s`\n", server)
+	if p.Server != "" {
+		fmt.Fprintf(&b, "- **Server:** <code>%s</code>\n", template.HTMLEscapeString(p.Server))
 	}
-	if fetched != "" {
-		fmt.Fprintf(&b, "- **Fetched:** %s\n", fetched)
+	if p.Fetched != "" {
+		fmt.Fprintf(&b, "- **Fetched:** %s\n", template.HTMLEscapeString(p.Fetched))
 	}
 	fmt.Fprintf(&b, "- **Published:** %s\n\n", time.Now().UTC().Format(time.RFC3339))
+	if p.NextCursor != "" {
+		b.WriteString("**Partial tool list:** the server supplied a next cursor; more tools may be available.\n\n")
+	}
+	if p.TTLMS != nil {
+		fmt.Fprintf(&b, "- **Cache TTL:** %s ms\n", *p.TTLMS)
+	}
+	if p.CacheScope != "" {
+		fmt.Fprintf(&b, "- **Cache scope:** %s\n", template.HTMLEscapeString(p.CacheScope))
+	}
+	if fields := p.ReportMetadata(); len(fields) > 0 {
+		writeJSONDetails(&b, "Report metadata", fields)
+	}
 	b.WriteString("## Tools\n\n")
 	if len(rows) == 0 {
 		b.WriteString("No tools returned.\n\n")
@@ -199,11 +221,39 @@ func markdown(server, fetched string, rows []Row) string {
 	}
 	b.WriteString("\n")
 	for _, r := range rows {
-		fmt.Fprintf(&b, "<a name=\"%s\"></a>\n\n### `%s`\n\n", r.ID, r.Name)
-		if r.Description != "" {
-			fmt.Fprintf(&b, "#### Description\n\n<p>%s</p>\n\n",
-				strings.ReplaceAll(template.HTMLEscapeString(r.Description), "\n", "<br>\n"))
+		fmt.Fprintf(&b, "<a name=\"%s\"></a>\n\n### <code>%s</code>\n\n", r.ID, template.HTMLEscapeString(r.Name))
+		if r.DisplayTitle() != r.Name {
+			fmt.Fprintf(&b, "<p>%s</p>\n\n", template.HTMLEscapeString(r.DisplayTitle()))
 		}
+		if r.Description != "" {
+			fmt.Fprintf(&b, "#### Description\n\n%s\n", renderDescription(r.Description))
+		}
+		if len(r.InputSchema) > 0 {
+			b.WriteString("#### Parameters\n\n")
+			b.WriteString("<ul>\n")
+			for _, parameter := range r.Parameters() {
+				fmt.Fprintf(&b, "<li><code>%s</code> (%s; %s)\n", template.HTMLEscapeString(parameter.Name), template.HTMLEscapeString(parameter.Type), parameter.Presence)
+				if parameter.Description != "" {
+					fmt.Fprintf(&b, "\n%s\n", renderDescription(parameter.Description))
+				}
+				if len(parameter.Enum) > 0 {
+					fmt.Fprintf(&b, "<p>Allowed values: <code>%s</code></p>\n", template.HTMLEscapeString(string(parameter.Enum)))
+				}
+				if len(parameter.Default) > 0 {
+					fmt.Fprintf(&b, "<p>Default: <code>%s</code></p>\n", template.HTMLEscapeString(string(parameter.Default)))
+				}
+				b.WriteString("</li>\n")
+			}
+			b.WriteString("</ul>\n\nSee the full input schema for constraints, alternatives, and references.\n")
+			writeJSONDetails(&b, "Input schema", r.InputSchema)
+		}
+		if len(r.OutputSchema) > 0 {
+			writeJSONDetails(&b, "Output schema", r.OutputSchema)
+		}
+		if len(r.Meta) > 0 {
+			writeJSONDetails(&b, "Tool metadata", r.Meta)
+		}
+		writeJSONDetails(&b, "Raw tool JSON", r)
 		b.WriteString("#### Annotations\n\n")
 		if r.None {
 			b.WriteString("No annotations declared.\n\n")
@@ -213,7 +263,7 @@ func markdown(server, fetched string, rows []Row) string {
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString("\nAbsent hints (⚠️) are shown at the [spec's conservative defaults](https://modelcontextprotocol.io/specification/2025-11-25/schema#toolannotations), i.e. the worst case.\n\n")
+	b.WriteString("\nAbsent hints (⚠️) are shown at the [spec's conservative defaults](https://modelcontextprotocol.io/specification/2026-07-28/schema#toolannotations), i.e. the worst case.\n\n")
 	b.WriteString("> **Caveat:** annotations are self-declared, unverified hints. Record them as vendor claims, not controls.\n")
 	return b.String()
 }
@@ -271,7 +321,9 @@ func publishGist(md, server string) (string, error) {
 }
 
 func newHandler() http.Handler {
-	tmpl := template.Must(template.ParseFS(tmplFS, "form.html", "trifecta.svg"))
+	tmpl := template.Must(template.New("form.html").Funcs(template.FuncMap{
+		"description": renderDescription, "json": prettyJSON,
+	}).ParseFS(tmplFS, "form.html", "trifecta.svg"))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// This server execs commands; refuse cross-origin form posts.
 		if o := r.Header.Get("Origin"); o != "" && o != "http://localhost:8321" && o != "http://127.0.0.1:8321" {
@@ -292,6 +344,7 @@ func newHandler() http.Handler {
 			Sort        string
 			Reverse     bool
 			HintTypes   [4]Hint
+			Report      payload
 		}{HintTypes: defaults}
 		if r.Method == http.MethodPost {
 			data.Payload = r.FormValue("payload")
@@ -325,13 +378,14 @@ func newHandler() http.Handler {
 					data.Payload = data.Snapshot
 				}
 				data.Server, data.Fetched = p.Server, p.Fetched
+				data.Report = p
 				for i, t := range p.Tools {
 					data.Rows = append(data.Rows, buildRow(t, i))
 				}
 				sortRows(data.Rows, data.Sort, data.Reverse)
 				data.Done = true
 				if publishing {
-					data.GistURL, err = publishGist(markdown(p.Server, p.Fetched, data.Rows), p.Server)
+					data.GistURL, err = publishGist(markdown(p, data.Rows), p.Server)
 					if err != nil {
 						data.GistErr = err.Error()
 					}

@@ -1,7 +1,7 @@
 # MCP hints
 
 Paste an MCP server's `tools/list` JSON (or point it at a live server) and see
-which [tool annotations](https://modelcontextprotocol.io/specification/2025-11-25/schema#toolannotations) —
+which [tool annotations](https://modelcontextprotocol.io/specification/2026-07-28/schema#toolannotations) —
 `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` — it
 actually declares, versus what the spec's conservative defaults assume when a
 hint is missing.
@@ -28,8 +28,23 @@ Then open http://localhost:8321, and either:
 
 For read-only tools, both destructive and idempotent hints display as “n/a”.
 Each tool has its own heading, description (when provided), and labeled
-annotation list. Descriptions stay visible for reading and copying. Published
-reports use the same hierarchy. Long URLs and description text wrap within
+annotation list. Friendly titles appear beneath the copyable tool name, preferring
+`title` over `annotations.title`. Descriptions stay visible and render Markdown
+using Goldmark. Raw HTML and dangerous links are disabled; images appear as alt
+text, so viewing a description does not fetch remote images.
+
+**Parameters** lists top-level properties, types, required/optional status,
+descriptions, allowed values, and defaults. Expand **Input schema** for the full
+constraints and references; this summary is not a schema validator. **Output
+schema**, **Tool metadata**, and **Raw tool JSON** are expandable too. The snapshot
+preserves unknown fields, including extensions and annotations.
+
+Reports show pagination and cache hints when supplied: `nextCursor` marks a
+potentially incomplete list; `ttlMs` and `cacheScope` describe caching, not gist
+visibility. **Report metadata** includes the original response fields. These
+details do not trigger additional requests or automatic refreshes.
+
+Published reports use the same hierarchy. Long URLs and description text wrap within
 the page. **Sort by** orders tools by name or any hint, and **Reverse** flips
 the order. Hints sort higher-risk values first: `true` for destructive/open-world,
 `false` for read-only/idempotent, using the displayed defaults when missing.
@@ -61,7 +76,8 @@ The tests POST to the real handler with fake `npx` and `gh` commands on `PATH`.
 They check missing and explicit annotations, read-only handling, fetched metadata, the
 Inspector arguments and OAuth environment setting, and stderr on success and
 failure. They also cover JSON parsing and publishing the displayed snapshot,
-including a failed publish and retry without fetching again.
+including a failed publish and retry without fetching again, metadata preservation,
+title precedence, parameter summaries, and safe Markdown rendering.
 They need Go and `/bin/sh`; no Node, network, browser, or credentials.
 This covers our integration with Inspector, not a real OAuth exchange or
 browser-side HTMX behavior.

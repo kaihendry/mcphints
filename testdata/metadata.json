@@ -1,0 +1,40 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "server": "https://example.test/mcp",
+    "fetched": "2020-01-02T03:04:05Z",
+    "resultType": "complete",
+    "nextCursor": "page-2",
+    "ttlMs": 0,
+    "cacheScope": "private",
+    "_meta": {"io.modelcontextprotocol/serverInfo": {"name": "example", "version": "1.2.3"}},
+    "com.example/list-extension": {"number": 9007199254740993},
+    "tools": [
+      {
+        "name": "send_message",
+        "title": "Send a message",
+        "description": "Send **Markdown** messages.\n\n- Check the destination\n- Review the `body`\n\n[Documentation](https://example.test/docs)",
+        "annotations": {"title": "Old title", "readOnlyHint": false, "destructiveHint": false, "openWorldHint": true, "com.example/annotation": "preserved"},
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "destination": {"type": "string", "description": "Choose a **destination**.", "enum": ["support", "sales"], "default": "support", "x-mcp-header": "X-Destination"},
+            "retries": {"type": "integer", "default": 0},
+            "notify": {"type": "boolean", "default": false},
+            "body": {"$ref": "#/$defs/body"}
+          },
+          "required": ["destination", "body"],
+          "$defs": {"body": {"type": "string", "minLength": 1}},
+          "additionalProperties": false
+        },
+        "outputSchema": {"oneOf": [{"type": "string"}, {"type": "null"}]},
+        "_meta": {"com.example/reviewer-note": "Check the destination"},
+        "icons": [{"src": "https://example.test/icon.svg"}],
+        "com.example/tool-extension": {"number": 9007199254740993}
+      },
+      {"name": "legacy", "annotations": {"title": "Legacy title"}},
+      {"name": "plain", "inputSchema": {"type": "object", "oneOf": [{"required": ["query"]}, {"required": ["id"]}]}}
+    ]
+  }
+}

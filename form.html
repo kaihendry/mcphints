@@ -26,7 +26,16 @@
   .tool { border-top: 1px solid #ddd; padding: 1rem 0; }
   .tool h3 { font: 600 1.1rem/1.5 ui-monospace, monospace; margin: 0 0 .5rem; }
   .tool h4 { font-size: 1rem; margin: 1rem 0 .3rem; }
-  .description { white-space: pre-wrap; margin: .3rem 0; }
+  .tool-title { margin: .3rem 0; color: #444; }
+  .description { margin: .3rem 0; overflow-x: auto; }
+  .description > :first-child { margin-top: 0; }
+  .description h5, .description h6 { font-size: 1rem; margin: .8rem 0 .3rem; }
+  .description table { border-collapse: collapse; }
+  .description th, .description td { border: 1px solid #ddd; padding: .3rem .5rem; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: .7rem; background: #f5f5f5; border-radius: .3rem; }
+  details { margin: .7rem 0; }
+  summary { cursor: pointer; }
+  .parameters > li { margin: .7rem 0; }
   .annotations { padding-left: 1.5rem; }
   .annotations li { margin: .3rem 0; }
   .sort-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-top: 1rem; }
@@ -48,7 +57,7 @@
 </style>
 
 <h1>MCP tool annotation hints</h1>
-<p>Per the <a href="https://modelcontextprotocol.io/specification/2025-11-25/schema#toolannotations">MCP spec</a>,
+<p>Per the <a href="https://modelcontextprotocol.io/specification/2026-07-28/schema#toolannotations">MCP spec</a>,
 every hint a server does <em>not</em> declare must be assumed at its conservative default &mdash;
 i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
 
@@ -85,6 +94,10 @@ i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
 
 {{if .Done}}
 {{if .Server}}<p><strong>Server:</strong> <code>{{.Server}}</code>{{if .Fetched}} &middot; fetched {{.Fetched}}{{end}}</p>{{end}}
+{{if .Report.NextCursor}}<p class="note"><strong>Partial tool list:</strong> the server supplied a next cursor; more tools may be available.</p>{{end}}
+{{if .Report.TTLMS}}<p class="hint">Cache TTL: {{.Report.TTLMS}} ms (server-provided freshness hint).</p>{{end}}
+{{if .Report.CacheScope}}<p class="hint">Cache scope: <code>{{.Report.CacheScope}}</code>{{if eq .Report.CacheScope "private"}} — reuse only within the same authorization context{{end}}.</p>{{end}}
+{{if .Report.ReportMetadata}}<details><summary>Report metadata</summary><pre>{{json .Report.ReportMetadata}}</pre></details>{{end}}
 {{if .GistURL}}<p class="note">Published as an unlisted gist (visible to anyone with the URL): <a href="{{.GistURL}}">{{.GistURL}}</a></p>{{end}}
 {{if .GistErr}}<p class="err">{{.GistErr}}</p>{{end}}
 <form method="post" action="/" hx-post="/" hx-target="#result" hx-select="#result" hx-swap="outerHTML" hx-disabled-elt="button, #result select, #result input[type=checkbox]">
@@ -121,7 +134,23 @@ Reverse puts lower-risk values first. Missing hints use their displayed defaults
   {{range .Rows}}
   <section class="tool">
     <h3 id="{{.ID}}">{{.Name}}</h3>
-    {{if .Description}}<h4>Description</h4><p class="description">{{.Description}}</p>{{end}}
+    {{if ne .DisplayTitle .Name}}<p class="tool-title">{{.DisplayTitle}}</p>{{end}}
+    {{if .Description}}<h4>Description</h4><div class="description">{{description .Description}}</div>{{end}}
+    {{if .InputSchema}}
+    <h4>Parameters</h4>
+    {{if .Parameters}}<ul class="parameters">
+      {{range .Parameters}}<li><code>{{.Name}}</code> <span class="hint">({{.Type}}; {{.Presence}})</span>
+        {{if .Description}}<div class="description">{{description .Description}}</div>{{end}}
+        {{if .Enum}}<div>Allowed values: <code>{{json .Enum}}</code></div>{{end}}
+        {{if .Default}}<div>Default: <code>{{json .Default}}</code></div>{{end}}
+      </li>{{end}}
+    </ul>{{end}}
+    <p class="hint">See the full input schema for all parameter constraints, alternatives, and references.</p>
+    <details><summary>Input schema</summary><pre>{{json .InputSchema}}</pre></details>
+    {{end}}
+    {{if .OutputSchema}}<details><summary>Output schema</summary><pre>{{json .OutputSchema}}</pre></details>{{end}}
+    {{if .Meta}}<details><summary>Tool metadata</summary><pre>{{json .Meta}}</pre></details>{{end}}
+    <details><summary>Raw tool JSON</summary><pre>{{json .Tool}}</pre></details>
     <h4>Annotations</h4>
     {{if .None}}<p class="hint">No annotations declared.</p>{{end}}
     <ul class="annotations">

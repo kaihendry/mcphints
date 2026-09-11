@@ -120,7 +120,7 @@ printf '%s\n' '{"tools":[
 				if none := strings.Contains(sections[i][2], "No annotations declared."); none != (tc.name == "unknown") {
 					t.Errorf("%s: missing-annotations label = %v", tc.name, none)
 				}
-				if description := strings.Contains(sections[i][2], `<h4>Description</h4><p class="description">Read the server without changes.</p>`); description != (tc.name == "read_only") {
+				if description := strings.Contains(sections[i][2], `<h4>Description</h4><div class="description"><p>Read the server without changes.</p>`); description != (tc.name == "read_only") {
 					t.Errorf("%s: description displayed = %v", tc.name, description)
 				}
 				var labels, hints []string
@@ -207,7 +207,7 @@ printf 'https://gist.github.com/example/snapshot\n'`,
 	if p.Tools[0].Title == nil || *p.Tools[0].Title != `A "quoted" <title>` {
 		t.Fatal("snapshot did not preserve escaped content")
 	}
-	if p.Tools[0].Description != description || !strings.Contains(w.Body.String(), `<p class="description">`+html.EscapeString(description)+"</p>") || strings.Contains(w.Body.String(), "<script>alert(1)</script>") {
+	if p.Tools[0].Description != description || !strings.Contains(w.Body.String(), "Second line | preserved.") || strings.Contains(w.Body.String(), "<script>alert(1)</script>") {
 		t.Fatal("description was lost or rendered as HTML")
 	}
 	contents := regexp.MustCompile(`(?s)<nav aria-label="Tool contents">(.*?)</nav>`).FindStringSubmatch(w.Body.String())
@@ -231,9 +231,9 @@ printf 'https://gist.github.com/example/snapshot\n'`,
 				t.Fatal(err)
 			}
 			for _, want := range []string{
-				"- **Server:** `" + server + "`", "- **Fetched:** " + fetched,
+				"- **Server:** <code>" + server + "</code>", "- **Fetched:** " + fetched,
 				"## Tools\n\n- <a href=\"#tool-1\"><code>another</code></a> — No hints declared.\n- <a href=\"#tool-0\"><code>read_only</code></a> — `readOnlyHint`: 🟢 claimed true\n\n",
-				"<a name=\"tool-1\"></a>\n\n### `another`", "<a name=\"tool-0\"></a>\n\n### `read_only`", "#### Description\n\n<p>" + strings.ReplaceAll(html.EscapeString(description), "\n", "<br>\n") + "</p>",
+				"<a name=\"tool-1\"></a>\n\n### <code>another</code>", "<a name=\"tool-0\"></a>\n\n### <code>read_only</code>", "#### Description\n\n<p>Read ", "Second line | preserved.</p>",
 				"#### Annotations\n\n- `readOnlyHint`: 🟢 claimed true\n- `destructiveHint`: n/a — read-only\n- `idempotentHint`: n/a — read-only\n- `openWorldHint`: ⚠️ assumed true",
 			} {
 				if !strings.Contains(string(md), want) {
