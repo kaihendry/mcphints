@@ -27,6 +27,9 @@ Then open http://localhost:8321, and either:
   `result.tools`, or a bare array. Empty lists display “No tools returned”.
 
 For read-only tools, both destructive and idempotent hints display as “n/a”.
+Expand **Description** beneath a tool name to read the server's description,
+when provided. Descriptions also accompany published reports. Long URLs and
+description text wrap within the page.
 Inspector diagnostics, including the authorization URL, appear immediately in
 the terminal if you need to open the URL yourself.
 

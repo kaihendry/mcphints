@@ -33,6 +33,7 @@ type Annotations struct {
 type Tool struct {
 	Name        string       `json:"name"`
 	Title       *string      `json:"title,omitempty"`
+	Description string       `json:"description,omitempty"`
 	Annotations *Annotations `json:"annotations"`
 }
 
@@ -44,16 +45,17 @@ type Hint struct {
 }
 
 type Row struct {
-	Name  string
-	None  bool    // no annotations declared at all
-	Hints [4]Hint // readOnly, destructive, idempotent, openWorld
+	Name        string
+	Description string
+	None        bool    // no annotations declared at all
+	Hints       [4]Hint // readOnly, destructive, idempotent, openWorld
 }
 
 // The spec's defaults are deliberately the worst case.
 var defaults = [4]bool{false, true, false, true}
 
 func buildRow(t Tool) Row {
-	r := Row{Name: t.Name, None: t.Annotations == nil}
+	r := Row{Name: t.Name, Description: t.Description, None: t.Annotations == nil}
 	var ptrs [4]*bool
 	if t.Annotations != nil {
 		a := t.Annotations
@@ -131,6 +133,12 @@ func markdown(server, fetched string, rows []Row) string {
 	for _, r := range rows {
 		fmt.Fprintf(&b, "| `%s` | %s | %s | %s | %s |\n",
 			r.Name, cell(r.Hints[0]), cell(r.Hints[1]), cell(r.Hints[2]), cell(r.Hints[3]))
+	}
+	for _, r := range rows {
+		if r.Description != "" {
+			fmt.Fprintf(&b, "\n<details>\n<summary>%s — description</summary>\n\n<pre>%s</pre>\n</details>\n",
+				template.HTMLEscapeString(r.Name), template.HTMLEscapeString(r.Description))
+		}
 	}
 	b.WriteString("\nAbsent hints (⚠️) are shown at the [spec's conservative defaults](https://modelcontextprotocol.io/specification/2025-11-25/schema#toolannotations), i.e. the worst case.\n\n")
 	b.WriteString("> **Caveat:** annotations are self-declared, unverified hints. Record them as vendor claims, not controls.\n")

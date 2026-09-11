@@ -11,9 +11,12 @@
   button { font: inherit; padding: .4rem 1.2rem; margin: .5rem .5rem 0 0; }
   button:disabled { opacity: .6; cursor: wait; }
   table { border-collapse: collapse; width: 100%; margin-top: 1.5rem; }
-  th, td { border: 1px solid #ddd; padding: .45rem .6rem; text-align: left; font-size: .9rem; }
+  th, td { border: 1px solid #ddd; padding: .45rem .6rem; text-align: left; vertical-align: top; font-size: .9rem; }
   th { background: #f5f5f5; }
   td:first-child { font-family: ui-monospace, monospace; }
+  .description { font: .85rem/1.5 system-ui, sans-serif; margin-top: .35rem; }
+  .description summary { cursor: pointer; color: #444; }
+  .description p { white-space: pre-wrap; max-width: 24rem; margin: .4rem 0; }
   .b { display: inline-block; padding: .1rem .5rem; border-radius: .8rem; font-size: .8rem; white-space: nowrap; }
   .safe  { background: #dcf5dc; color: #145214; }        /* declared, safe value */
   .risk  { background: #fadcdc; color: #7a1212; }        /* declared, risky value */
@@ -23,6 +26,7 @@
   .note { background: #f0f4fa; border-left: 3px solid #4a7ab5; padding: .6rem .9rem; font-size: .9rem; }
   .legend { font-size: .85rem; color: #444; }
   .hint { font-size: .85rem; color: #666; margin: .3rem 0; }
+  #result { overflow-wrap: anywhere; }
   .spinner { display: none; color: #4a7ab5; }
   .htmx-request .spinner { display: inline; }
 </style>
@@ -60,7 +64,7 @@ i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
   <tr><th>Tool</th><th>readOnlyHint</th><th>destructiveHint</th><th>idempotentHint</th><th>openWorldHint</th></tr>
   {{range .Rows}}
   <tr>
-    <td>{{.Name}}{{if .None}}<br><span class="b assumed">no annotations at all</span>{{end}}</td>
+    <td>{{.Name}}{{if .None}}<br><span class="b assumed">no annotations at all</span>{{end}}{{if .Description}}<details class="description"><summary>Description</summary><p>{{.Description}}</p></details>{{end}}</td>
     {{range .Hints}}
     <td>
       {{if .Moot}}<span class="b moot">n/a &mdash; read-only</span>

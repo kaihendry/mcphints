@@ -25,7 +25,7 @@ printf '%s\n' 'OAuth diagnostic: https://auth.example.test/authorize' >&2
 if [ "$MCPHINTS_SMOKE_FAIL" = true ]; then exit 1; fi
 printf '%s\n' '{"tools":[
   {"name":"unknown","inputSchema":{"type":"object"}},
-  {"name":"read_only","inputSchema":{"type":"object"},"annotations":{"readOnlyHint":true}},
+  {"name":"read_only","description":"Read the server without changes.","inputSchema":{"type":"object"},"annotations":{"readOnlyHint":true}},
   {"name":"annotated","inputSchema":{"type":"object"},"annotations":{"readOnlyHint":false,"destructiveHint":false,"idempotentHint":true,"openWorldHint":false}}
 ]}'
 `
@@ -120,6 +120,9 @@ printf '%s\n' '{"tools":[
 				if none := strings.Contains(rows[i][1], "no annotations at all"); none != (tc.name == "unknown") {
 					t.Errorf("%s: missing-annotations label = %v", tc.name, none)
 				}
+				if description := strings.Contains(rows[i][1], `<summary>Description</summary><p>Read the server without changes.</p>`); description != (tc.name == "read_only") {
+					t.Errorf("%s: description displayed = %v", tc.name, description)
+				}
 				var hints []string
 				for _, badge := range badges.FindAllStringSubmatch(rows[i][2], -1) {
 					hints = append(hints, badge[1]+":"+html.UnescapeString(badge[2]))
@@ -188,7 +191,8 @@ printf 'https://gist.github.com/example/snapshot\n'`,
 	}
 	const server = "https://api.fastmail.com/mcp"
 	const fetched = "2020-01-02T03:04:05Z"
-	const source = `{"result":{"server":"` + server + `","fetched":"` + fetched + `","tools":[{"name":"read_only","title":"A \"quoted\" <title>","annotations":{"readOnlyHint":true,"destructiveHint":true,"idempotentHint":false}}]}}`
+	const description = "Read <script>alert(1)</script>.\nSecond line | preserved."
+	const source = `{"result":{"server":"` + server + `","fetched":"` + fetched + `","tools":[{"name":"read_only","title":"A \"quoted\" <title>","description":"Read <script>alert(1)</script>.\nSecond line | preserved.","annotations":{"readOnlyHint":true,"destructiveHint":true,"idempotentHint":false}}]}}`
 	handler := newHandler()
 	w := postForm(t, handler, url.Values{"payload": {source}})
 	snapshot := reportSnapshot(t, w.Body.String())
@@ -198,6 +202,9 @@ printf 'https://gist.github.com/example/snapshot\n'`,
 	}
 	if p.Tools[0].Title == nil || *p.Tools[0].Title != `A "quoted" <title>` {
 		t.Fatal("snapshot did not preserve escaped content")
+	}
+	if p.Tools[0].Description != description || !strings.Contains(w.Body.String(), "<p>"+html.EscapeString(description)+"</p>") || strings.Contains(w.Body.String(), "<script>alert(1)</script>") {
+		t.Fatal("description was lost or rendered as HTML")
 	}
 	for _, fail := range []string{"true", "false"} {
 		t.Run("gist_failure="+fail, func(t *testing.T) {
@@ -216,6 +223,7 @@ printf 'https://gist.github.com/example/snapshot\n'`,
 			for _, want := range []string{
 				"- **Server:** `" + server + "`", "- **Fetched:** " + fetched,
 				"| `read_only` | 🟢 claimed true | n/a — read-only | n/a — read-only | ⚠️ assumed true |",
+				"<summary>read_only — description</summary>", "<pre>" + html.EscapeString(description) + "</pre>",
 			} {
 				if !strings.Contains(string(md), want) {
 					t.Errorf("published report missing %q: %s", want, md)
