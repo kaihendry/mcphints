@@ -28,6 +28,43 @@ Then open http://localhost:8321, and either:
 Results can also be published as an unlisted GitHub gist via `gh` — visible
 to anyone with the URL, not access-controlled.
 
+## Smoke tests
+
+Run the automated smoke test and static checks:
+
+```sh
+go test ./...
+go vet ./...
+```
+
+The test POSTs to the real handler with a fake `npx` on `PATH`. It checks
+missing and explicit annotations, read-only handling, fetched metadata, the
+Inspector arguments and OAuth environment setting, and stderr on success and
+failure. It needs Go and `/bin/sh`; no Node, network, browser, or credentials.
+This covers our integration with Inspector, not a real OAuth exchange or
+browser-side HTMX behavior.
+
+Before changing `fetchTools` or updating Inspector, also check Fastmail OAuth
+manually. Start the app with a fresh, isolated token store:
+
+```sh
+MCP_INSPECTOR_OAUTH_STATE_PATH="$(mktemp -d)/oauth.json" go run .
+```
+
+1. Open http://localhost:8321, enter `https://api.fastmail.com/mcp`, and click
+   **Analyse**.
+2. Confirm the authorization page opens. Wait more than 15 seconds before
+   completing authorization, then confirm the tool table appears. Complete
+   this within the app's five-minute fetch timeout.
+3. Click **Analyse** again and confirm tools appear using cached credentials,
+   without another authorization prompt. Keep the same app process running
+   so it uses the same temporary token store.
+
+The [Inspector storage override](https://github.com/modelcontextprotocol/inspector/blob/main/clients/cli/README.md#stored-auth-web--cli-handoff)
+keeps this check separate from your usual cached credentials. The automated
+test uses a fake Inspector, so repeat this manual check when changing the
+Inspector version, including updates picked up by the floating `@2` version.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

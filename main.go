@@ -44,7 +44,7 @@ type Hint struct {
 
 type Row struct {
 	Name  string
-	None  bool // no annotations declared at all
+	None  bool    // no annotations declared at all
 	Hints [4]Hint // readOnly, destructive, idempotent, openWorld
 }
 
@@ -174,9 +174,9 @@ func publishGist(md, server string) (string, error) {
 	return strings.TrimSpace(out.String()), nil
 }
 
-func main() {
+func newHandler() http.Handler {
 	tmpl := template.Must(template.ParseFS(tmplFS, "form.html"))
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// This server execs commands; refuse cross-origin form posts.
 		if o := r.Header.Get("Origin"); o != "" && o != "http://localhost:8321" && o != "http://127.0.0.1:8321" {
 			http.Error(w, "forbidden origin", http.StatusForbidden)
@@ -234,6 +234,10 @@ func main() {
 			log.Print(err)
 		}
 	})
+}
+
+func main() {
+	http.Handle("/", newHandler())
 	log.Println("listening on http://localhost:8321")
 	log.Fatal(http.ListenAndServe("localhost:8321", nil))
 }
