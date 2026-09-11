@@ -11,6 +11,9 @@
   button { font: inherit; padding: .4rem 1.2rem; margin: .5rem .5rem 0 0; }
   button:disabled { opacity: .6; cursor: wait; }
   h2 { font-size: 1.2rem; }
+  h2, h3 { scroll-margin-top: 1rem; }
+  .contents { padding-left: 1.5rem; }
+  .contents li { margin: .5rem 0; }
   .tool { border-top: 1px solid #ddd; padding: 1rem 0; }
   .tool h3 { font: 600 1.1rem/1.5 ui-monospace, monospace; margin: 0 0 .5rem; }
   .tool h4 { font-size: 1rem; margin: 1rem 0 .3rem; }
@@ -64,6 +67,7 @@ i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
 <form method="post" action="/" hx-post="/" hx-target="#result" hx-select="#result" hx-swap="outerHTML" hx-disabled-elt="button, #result select, #result input[type=checkbox]">
   <input type="hidden" name="payload" value="{{.Snapshot}}">
 {{if .Rows}}
+<h2 id="tools">Tools</h2>
 <div class="sort-controls">
   <label>Sort by <select name="sort" onchange="this.form.requestSubmit()">
     <option value="">Server order</option>
@@ -73,10 +77,19 @@ i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
   <label><input type="checkbox" name="reverse" value="1" {{if .Reverse}}checked{{end}} onchange="this.form.requestSubmit()"> Reverse</label>
 </div>
 <p class="hint">Hints sort false first (true first when reversed). Missing hints use their displayed defaults; n/a stays last.</p>
-<h2>Tools</h2>
+<nav aria-label="Tool contents">
+  <ul class="contents">
+  {{range .Rows}}
+    <li><a href="#{{.ID}}"><code>{{.Name}}</code></a>
+      {{range .Claims}}<span class="b {{if .Risky}}risk{{else}}safe{{end}}">{{.Name}}: claimed {{.Value}}</span>
+      {{else}}<span class="hint">No hints declared.</span>{{end}}
+    </li>
+  {{end}}
+  </ul>
+</nav>
   {{range .Rows}}
   <section class="tool">
-    <h3>{{.Name}}</h3>
+    <h3 id="{{.ID}}">{{.Name}}</h3>
     {{if .Description}}<h4>Description</h4><p class="description">{{.Description}}</p>{{end}}
     <h4>Annotations</h4>
     {{if .None}}<p class="hint">No annotations declared.</p>{{end}}
@@ -91,6 +104,7 @@ i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
     </li>
     {{end}}
     </ul>
+    <a class="hint" href="#tools">Back to tools</a>
   </section>
   {{end}}
 

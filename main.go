@@ -48,10 +48,21 @@ type Hint struct {
 }
 
 type Row struct {
+	ID          string
 	Name        string
 	Description string
 	None        bool    // no annotations declared at all
 	Hints       [4]Hint // readOnly, destructive, idempotent, openWorld
+}
+
+func (r Row) Claims() []Hint {
+	var claims []Hint
+	for _, h := range r.Hints {
+		if h.Declared && !h.Moot {
+			claims = append(claims, h)
+		}
+	}
+	return claims
 }
 
 // The spec's defaults are deliberately the worst case.
@@ -62,8 +73,8 @@ var defaults = [4]Hint{
 	{Name: "openWorldHint", Value: true},
 }
 
-func buildRow(t Tool) Row {
-	r := Row{Name: t.Name, Description: t.Description, None: t.Annotations == nil}
+func buildRow(t Tool, index int) Row {
+	r := Row{ID: fmt.Sprintf("tool-%d", index), Name: t.Name, Description: t.Description, None: t.Annotations == nil}
 	var ptrs [4]*bool
 	if t.Annotations != nil {
 		a := t.Annotations
@@ -174,7 +185,21 @@ func markdown(server, fetched string, rows []Row) string {
 		b.WriteString("No tools returned.\n\n")
 	}
 	for _, r := range rows {
-		fmt.Fprintf(&b, "### `%s`\n\n", r.Name)
+		fmt.Fprintf(&b, "- <a href=\"#%s\"><code>%s</code></a> — ", r.ID, template.HTMLEscapeString(r.Name))
+		var claims []string
+		for _, h := range r.Claims() {
+			claims = append(claims, fmt.Sprintf("`%s`: %s", h.Name, cell(h)))
+		}
+		if len(claims) == 0 {
+			b.WriteString("No hints declared.")
+		} else {
+			b.WriteString(strings.Join(claims, "; "))
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+	for _, r := range rows {
+		fmt.Fprintf(&b, "<a name=\"%s\"></a>\n\n### `%s`\n\n", r.ID, r.Name)
 		if r.Description != "" {
 			fmt.Fprintf(&b, "#### Description\n\n<p>%s</p>\n\n",
 				strings.ReplaceAll(template.HTMLEscapeString(r.Description), "\n", "<br>\n"))
@@ -300,8 +325,8 @@ func newHandler() http.Handler {
 					data.Payload = data.Snapshot
 				}
 				data.Server, data.Fetched = p.Server, p.Fetched
-				for _, t := range p.Tools {
-					data.Rows = append(data.Rows, buildRow(t))
+				for i, t := range p.Tools {
+					data.Rows = append(data.Rows, buildRow(t, i))
 				}
 				sortRows(data.Rows, data.Sort, data.Reverse)
 				data.Done = true

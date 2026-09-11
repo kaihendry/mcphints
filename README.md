@@ -33,7 +33,9 @@ reports use the same hierarchy. Long URLs and description text wrap within
 the page. **Sort by** orders tools by name or any hint, and **Reverse** flips
 the order. Hints sort false first using the displayed defaults when missing;
 read-only “n/a” values stay last. Sorting reuses the snapshot, and publishing
-preserves the displayed order.
+preserves the displayed order. The **Tools** contents list links to each tool,
+summarizes its applicable claimed hints, and follows the same sort order.
+Published reports include the contents too.
 Inspector diagnostics, including the authorization URL, appear immediately in
 the terminal if you need to open the URL yourself.
 

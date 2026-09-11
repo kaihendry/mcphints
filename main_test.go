@@ -99,7 +99,7 @@ printf '%s\n' '{"tools":[
 				t.Errorf("invalid fetched timestamp: %v", err)
 			}
 
-			sections := regexp.MustCompile(`(?s)<section class="tool">\s*<h3>(.*?)</h3>(.*?)</section>`).FindAllStringSubmatch(body, -1)
+			sections := regexp.MustCompile(`(?s)<section class="tool">\s*<h3 id="[^"]+">(.*?)</h3>(.*?)</section>`).FindAllStringSubmatch(body, -1)
 			cases := []struct {
 				name  string
 				hints []string
@@ -210,6 +210,12 @@ printf 'https://gist.github.com/example/snapshot\n'`,
 	if p.Tools[0].Description != description || !strings.Contains(w.Body.String(), `<p class="description">`+html.EscapeString(description)+"</p>") || strings.Contains(w.Body.String(), "<script>alert(1)</script>") {
 		t.Fatal("description was lost or rendered as HTML")
 	}
+	contents := regexp.MustCompile(`(?s)<nav aria-label="Tool contents">(.*?)</nav>`).FindStringSubmatch(w.Body.String())
+	if len(contents) != 2 || !strings.Contains(contents[1], "readOnlyHint: claimed true") ||
+		!strings.Contains(contents[1], "No hints declared.") || strings.Contains(contents[1], "destructiveHint") ||
+		strings.Contains(contents[1], "idempotentHint") || strings.Contains(contents[1], "openWorldHint") {
+		t.Fatalf("contents must summarize applicable claims only: %v", contents)
+	}
 	for _, fail := range []string{"true", "false"} {
 		t.Run("gist_failure="+fail, func(t *testing.T) {
 			t.Setenv("MCPHINTS_SMOKE_FAIL", fail)
@@ -226,7 +232,8 @@ printf 'https://gist.github.com/example/snapshot\n'`,
 			}
 			for _, want := range []string{
 				"- **Server:** `" + server + "`", "- **Fetched:** " + fetched,
-				"## Tools\n\n### `another`", "### `read_only`", "#### Description\n\n<p>" + strings.ReplaceAll(html.EscapeString(description), "\n", "<br>\n") + "</p>",
+				"## Tools\n\n- <a href=\"#tool-1\"><code>another</code></a> — No hints declared.\n- <a href=\"#tool-0\"><code>read_only</code></a> — `readOnlyHint`: 🟢 claimed true\n\n",
+				"<a name=\"tool-1\"></a>\n\n### `another`", "<a name=\"tool-0\"></a>\n\n### `read_only`", "#### Description\n\n<p>" + strings.ReplaceAll(html.EscapeString(description), "\n", "<br>\n") + "</p>",
 				"#### Annotations\n\n- `readOnlyHint`: 🟢 claimed true\n- `destructiveHint`: n/a — read-only\n- `idempotentHint`: n/a — read-only\n- `openWorldHint`: ⚠️ assumed true",
 			} {
 				if !strings.Contains(string(md), want) {
@@ -253,7 +260,7 @@ func TestSortSnapshot(t *testing.T) {
 	// No executables: sorting must never fetch or publish.
 	t.Setenv("PATH", t.TempDir())
 	const source = `{"server":"https://example.test/mcp","fetched":"2020-01-02T03:04:05Z","tools":[
-		{"name":"z_missing"},
+		{"name":"z_missing","annotations":{}},
 		{"name":"b_safe","annotations":{"readOnlyHint":false,"destructiveHint":false,"idempotentHint":true,"openWorldHint":false}},
 		{"name":"c_risky","annotations":{"readOnlyHint":false,"destructiveHint":true,"idempotentHint":false,"openWorldHint":true}},
 		{"name":"a_readonly","annotations":{"readOnlyHint":true}}
@@ -282,9 +289,19 @@ func TestSortSnapshot(t *testing.T) {
 			form.Set("reverse", "1")
 		}
 		w := postForm(t, handler, form)
-		var names []string
-		for _, heading := range regexp.MustCompile(`<h3>([^<]+)</h3>`).FindAllStringSubmatch(w.Body.String(), -1) {
+		var names, linkedNames []string
+		for _, heading := range regexp.MustCompile(`<h3 id="[^"]+">([^<]+)</h3>`).FindAllStringSubmatch(w.Body.String(), -1) {
 			names = append(names, heading[1])
+		}
+		ids := map[string]string{"z_missing": "tool-0", "b_safe": "tool-1", "c_risky": "tool-2", "a_readonly": "tool-3"}
+		for _, link := range regexp.MustCompile(`<a href="#(tool-[^"]+)"><code>([^<]+)</code></a>`).FindAllStringSubmatch(w.Body.String(), -1) {
+			linkedNames = append(linkedNames, link[2])
+			if link[1] != ids[link[2]] || !strings.Contains(w.Body.String(), `<h3 id="`+link[1]+`">`+link[2]+`</h3>`) {
+				t.Errorf("contents link changed or has no matching heading: %s", link[0])
+			}
+		}
+		if !slices.Equal(linkedNames, names) {
+			t.Errorf("contents order = %v, want %v", linkedNames, names)
 		}
 		if strings.Join(names, " ") != tc.want {
 			t.Errorf("sort %q, reverse %v: got %v, want %s", tc.key, tc.reverse, names, tc.want)
