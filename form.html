@@ -12,17 +12,12 @@
   button:disabled { opacity: .6; cursor: wait; }
   h2 { font-size: 1.2rem; }
   h2, h3 { scroll-margin-top: 1rem; }
-  .contents { list-style: none; padding: 0; }
-  .contents-head, .contents > li { display: grid; grid-template-columns: minmax(12rem, 2fr) repeat(4, minmax(0, 1fr)); gap: .5rem; align-items: start; }
-  .contents-head { font-size: .85rem; color: #666; }
-  .contents > li { padding: .6rem 0; border-top: 1px solid #eee; }
-  .hint-name { display: none; }
-  @media (max-width: 44rem) {
-    .contents-head { display: none; }
-    .contents > li { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .contents > li > a { grid-column: 1 / -1; }
-    .hint-name { display: block; font-size: .85rem; color: #666; }
-  }
+  .contents-wrap { overflow-x: auto; }
+  .contents { border-collapse: collapse; width: 100%; }
+  .contents th, .contents td { padding: .5rem .6rem; text-align: left; vertical-align: top; }
+  .contents thead th { font-size: .85rem; color: #666; font-weight: 600; border-bottom: 1px solid #ddd; white-space: nowrap; }
+  .contents tbody th { font-weight: 400; }
+  .contents tbody tr { border-top: 1px solid #eee; }
   .tool { border-top: 1px solid #ddd; padding: 1rem 0; }
   .tool h3 { font: 600 1.1rem/1.5 ui-monospace, monospace; margin: 0 0 .5rem; }
   .tool h4 { font-size: 1rem; margin: 1rem 0 .3rem; }
@@ -116,21 +111,27 @@ i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
 <p class="hint">Hints sort higher-risk values first: destructive/open-world true, read-only/idempotent false.
 Reverse puts lower-risk values first. Missing hints use their displayed defaults; n/a stays last.</p>
 <nav aria-label="Tool contents">
-  <div class="contents-head" aria-hidden="true"><span>Tool</span>{{range .HintTypes}}<code>{{.Name}}</code>{{end}}</div>
-  <ul class="contents">
-  {{range .Rows}}
-    <li><a href="#{{.ID}}"><code>{{.Name}}</code></a>
-      {{range .Hints}}
-      <span role="group" aria-label="{{.Name}}">
-        <code class="hint-name" aria-hidden="true">{{.Name}}</code>
-        {{if .Moot}}<span class="b moot">n/a</span>
-        {{else if not .Declared}}<span class="hint">not declared</span>
-        {{else}}<span class="b {{if .Risky}}risk{{else}}safe{{end}}">claimed {{.Value}}</span>{{end}}
-      </span>
-      {{end}}
-    </li>
-  {{end}}
-  </ul>
+  <div class="contents-wrap">
+  <table class="contents">
+    <thead>
+      <tr><th scope="col">Tool</th>{{range .HintTypes}}<th scope="col"><code>{{.Name}}</code></th>{{end}}</tr>
+    </thead>
+    <tbody>
+    {{range .Rows}}
+      <tr>
+        <th scope="row"><a href="#{{.ID}}"><code>{{.Name}}</code></a></th>
+        {{range .Hints}}
+        <td>
+          {{if .Moot}}<span class="b moot">n/a</span>
+          {{else if not .Declared}}<span class="hint">not declared</span>
+          {{else}}<span class="b {{if .Risky}}risk{{else}}safe{{end}}">claimed {{.Value}}</span>{{end}}
+        </td>
+        {{end}}
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
 </nav>
   {{range .Rows}}
   <section class="tool">
