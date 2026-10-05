@@ -2,7 +2,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MCP tool annotation hints</title>
-<script src="https://unpkg.com/htmx.org@2.0.4"></script>
+<script src="https://unpkg.com/htmx.org@4.0.0/dist/htmx.min.js"></script>
 <style>
   body { font: 16px/1.5 system-ui, sans-serif; max-width: 60rem; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
   h1 { font-size: 1.4rem; }
@@ -69,7 +69,7 @@ i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
   <a href="https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/">The lethal trifecta, by Simon Willison</a>.</figcaption>
 </figure>
 
-<form method="post" action="/" hx-post="/" hx-target="#result" hx-select="#result" hx-swap="outerHTML" hx-disabled-elt="button, #result select, #result input[type=checkbox]">
+<form method="post" action="/" hx-post="/" hx-target="#result" hx-select="#result" hx-swap="outerHTML" hx-disable="button, #result select, #result input[type=checkbox]">
   <p class="hint">Fetch straight from a server &mdash; an <code>http(s)://</code> URL (OAuth handled by the
   inspector; first use may open a browser to authorise) or a stdio command:</p>
   <input name="server" value="{{.ServerInput}}" list="known-servers"
@@ -96,7 +96,7 @@ i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
 {{if .Report.ReportMetadata}}<details><summary>Report metadata</summary><pre>{{json .Report.ReportMetadata}}</pre></details>{{end}}
 {{if .GistURL}}<p class="note">Published as an unlisted gist (visible to anyone with the URL): <a href="{{.GistURL}}">{{.GistURL}}</a></p>{{end}}
 {{if .GistErr}}<p class="err">{{.GistErr}}</p>{{end}}
-<form method="post" action="/" hx-post="/" hx-target="#result" hx-select="#result" hx-swap="outerHTML" hx-disabled-elt="button, #result select, #result input[type=checkbox]">
+<form method="post" action="/" hx-post="/" hx-target="#result" hx-select="#result" hx-swap="outerHTML" hx-disable="button, #result select, #result input[type=checkbox]">
   <input type="hidden" name="payload" value="{{.Snapshot}}">
 {{if .Rows}}
 <h2 id="tools">Tools</h2>
