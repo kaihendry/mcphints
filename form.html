@@ -94,8 +94,6 @@ i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
 {{if .Report.TTLMS}}<p class="hint">Cache TTL: {{.Report.TTLMS}} ms (server-provided freshness hint).</p>{{end}}
 {{if .Report.CacheScope}}<p class="hint">Cache scope: <code>{{.Report.CacheScope}}</code>{{if eq .Report.CacheScope "private"}} — reuse only within the same authorization context{{end}}.</p>{{end}}
 {{if .Report.ReportMetadata}}<details><summary>Report metadata</summary><pre>{{json .Report.ReportMetadata}}</pre></details>{{end}}
-{{if .GistURL}}<p class="note">Published as an unlisted gist (visible to anyone with the URL): <a href="{{.GistURL}}">{{.GistURL}}</a></p>{{end}}
-{{if .GistErr}}<p class="err">{{.GistErr}}</p>{{end}}
 <form method="post" action="/" hx-post="/" hx-target="#result" hx-select="#result" hx-swap="outerHTML" hx-disable="button, #result select, #result input[type=checkbox]">
   <input type="hidden" name="payload" value="{{.Snapshot}}">
 {{if .Rows}}
@@ -184,7 +182,9 @@ clients must not make security-critical decisions based on them. Treat a declare
 <p>No tools returned.</p>
 {{end}}
 
-{{if not .GistURL}}
+{{if .GistURL}}<p class="note">Published as an unlisted gist (visible to anyone with the URL): <a href="{{.GistURL}}">{{.GistURL}}</a></p>
+{{else}}
+  {{if .GistErr}}<p class="err">{{.GistErr}}</p>{{end}}
   <button name="action" value="gist">Publish this report</button>
   <p class="hint">Creates an unlisted GitHub gist, visible to anyone with the link.</p>
 {{end}}
