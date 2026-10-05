@@ -85,7 +85,7 @@ i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
   <span class="spinner">working&hellip; (a fetch can take ~30s; OAuth may open a browser tab)</span>
 </form>
 
-<div id="result">
+<div id="result" data-server="{{if .Fetched}}{{.Server}}{{end}}">
 {{if .Err}}<p class="err">{{.Err}}</p>{{end}}
 
 {{if .Done}}
@@ -192,3 +192,24 @@ clients must not make security-critical decisions based on them. Treat a declare
 </form>
 {{end}}
 </div>
+
+<script>
+  // Remember servers that fetched successfully, in this browser only.
+  htmx.onLoad(() => {
+    let servers = [];
+    try { servers = JSON.parse(localStorage.getItem('servers')) || []; } catch {}
+    const fetched = document.getElementById('result').dataset.server;
+    if (fetched) {
+      servers = [fetched, ...servers.filter(s => s !== fetched)].slice(0, 20);
+      try { localStorage.setItem('servers', JSON.stringify(servers)); } catch {}
+    }
+    const list = document.getElementById('known-servers');
+    list.querySelectorAll('[data-tested]').forEach(o => o.remove());
+    const presets = new Set([...list.options].map(o => o.value));
+    for (const s of servers.filter(s => !presets.has(s)).reverse()) {
+      const o = new Option('Previously tested', s);
+      o.dataset.tested = '';
+      list.prepend(o);
+    }
+  });
+</script>
