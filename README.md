@@ -17,7 +17,9 @@ Open http://localhost:8321 and enter an MCP server URL or stdio command,
 or paste `tools/list` JSON.
 
 Fetching from a server requires Node.js (`npx`). The MCP Inspector handles
-OAuth and opens your browser when authorization is needed.
+OAuth and opens your browser when authorization is needed. If a server fails
+with "Issuer mismatch" (its OAuth metadata breaks RFC 8414 §3.3), tick **Skip
+OAuth issuer check** to correct it client-side and report it to the vendor.
 
 **Publish this report** shares the results as an unlisted GitHub gist using
 an authenticated `gh` CLI. Anyone with the gist URL can read it.

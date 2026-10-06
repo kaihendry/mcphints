@@ -8,6 +8,7 @@ import (
 	"cmp"
 	"context"
 	"embed"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -23,6 +24,9 @@ import (
 
 //go:embed form.html trifecta.svg
 var tmplFS embed.FS
+
+//go:embed issuer-shim.mjs
+var issuerShim []byte
 
 type Annotations struct {
 	Title           *string `json:"title,omitempty"`
@@ -274,9 +278,10 @@ func markdown(p payload, rows []Row) string {
 // arg parser drops everything from `-y` on, so it spawned a bare `npx`, which
 // is an interactive shell, and fed the handshake to it — hence the baffling
 // `sh: method:initialize: command not found`.)
-func fetchTools(server string) (string, error) {
+func fetchTools(server string, skipIssuerCheck bool) (string, error) {
 	args := []string{"-y", "@modelcontextprotocol/inspector@2", "--cli"}
-	if strings.HasPrefix(server, "http://") || strings.HasPrefix(server, "https://") {
+	remote := strings.HasPrefix(server, "http://") || strings.HasPrefix(server, "https://")
+	if remote {
 		// Transport is only auto-detected from a /mcp or /sse path, and the 15s
 		// default connect timeout is far too short for a browser OAuth round-trip.
 		transport := "http"
@@ -297,6 +302,13 @@ func fetchTools(server string) (string, error) {
 	// browser. Tee stderr so the consent URL is visible while waiting and is
 	// still included in the error if the command fails.
 	cmd.Env = append(os.Environ(), "MCP_AUTO_OPEN_ENABLED=true")
+	// For servers whose OAuth metadata names the wrong issuer (RFC 8414 §3.3),
+	// preload a fetch wrapper that corrects it. Remote only: a stdio server
+	// would inherit NODE_OPTIONS too.
+	if skipIssuerCheck && remote {
+		preload := "--import=data:text/javascript;base64," + base64.StdEncoding.EncodeToString(issuerShim)
+		cmd.Env = append(cmd.Env, "NODE_OPTIONS="+strings.TrimSpace(os.Getenv("NODE_OPTIONS")+" "+preload))
+	}
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, io.MultiWriter(&errb, os.Stderr)
 	if err := cmd.Run(); err != nil {
@@ -331,24 +343,26 @@ func newHandler() http.Handler {
 			return
 		}
 		data := struct {
-			Payload     string
-			Snapshot    string
-			ServerInput string
-			Rows        []Row
-			Err         string
-			Done        bool
-			Server      string
-			Fetched     string
-			GistURL     string
-			GistErr     string
-			Sort        string
-			Reverse     bool
-			HintTypes   [4]Hint
-			Report      payload
+			Payload         string
+			Snapshot        string
+			ServerInput     string
+			SkipIssuerCheck bool
+			Rows            []Row
+			Err             string
+			Done            bool
+			Server          string
+			Fetched         string
+			GistURL         string
+			GistErr         string
+			Sort            string
+			Reverse         bool
+			HintTypes       [4]Hint
+			Report          payload
 		}{HintTypes: defaults}
 		if r.Method == http.MethodPost {
 			data.Payload = r.FormValue("payload")
 			data.ServerInput = strings.TrimSpace(r.FormValue("server"))
+			data.SkipIssuerCheck = r.FormValue("skip_issuer_check") == "1"
 			data.Sort = r.FormValue("sort")
 			data.Reverse = r.FormValue("reverse") == "1"
 			publishing := r.FormValue("action") == "gist"
@@ -358,7 +372,7 @@ func newHandler() http.Handler {
 			var snapshot []byte
 			var err error
 			if fetching {
-				raw, err = fetchTools(data.ServerInput)
+				raw, err = fetchTools(data.ServerInput, data.SkipIssuerCheck)
 			}
 			if err == nil {
 				p, err = parse(raw)

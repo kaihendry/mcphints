@@ -79,6 +79,9 @@ i.e. the worst case: not read-only, destructive, not idempotent, open-world.</p>
     <option value="https://gmailmcp.googleapis.com/mcp/v1">Gmail</option>
     <option value="uvx awslabs.aws-documentation-mcp-server@latest">AWS documentation (stdio)</option>
   </datalist>
+  <p class="hint"><label><input type="checkbox" name="skip_issuer_check" value="1" {{if .SkipIssuerCheck}}checked{{end}}>
+  Skip OAuth issuer check</label> &mdash; only for servers that fail with &ldquo;Issuer mismatch&rdquo;
+  (<a href="https://www.rfc-editor.org/rfc/rfc8414#section-3.3">RFC 8414 §3.3</a>). Disables mix-up attack protection.</p>
   <p class="hint">&hellip;or paste <code>tools/list</code> JSON here (a <code>tools</code> object, a JSON-RPC response, or a bare array):</p>
   <textarea name="payload" placeholder='{"tools":[{"name":"…","annotations":{"readOnlyHint":true}}]}'>{{.Payload}}</textarea><br>
   <button>Analyse</button>

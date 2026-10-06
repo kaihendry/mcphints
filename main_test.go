@@ -21,6 +21,7 @@ func TestSmoke(t *testing.T) {
 	const fakeInspector = `#!/bin/sh
 set -eu
 printf '%s\n' "${MCP_AUTO_OPEN_ENABLED:-}" "$@" > "$MCPHINTS_SMOKE_INVOCATION"
+printf '%s' "${NODE_OPTIONS:-}" > "$MCPHINTS_SMOKE_INVOCATION.node"
 printf '%s\n' 'OAuth diagnostic: https://auth.example.test/authorize' >&2
 if [ "$MCPHINTS_SMOKE_FAIL" = true ]; then exit 1; fi
 printf '%s\n' '{"tools":[
@@ -137,6 +138,28 @@ printf '%s\n' '{"tools":[
 			}
 		})
 	}
+
+	t.Run("skip_issuer_check", func(t *testing.T) {
+		t.Setenv("MCPHINTS_SMOKE_FAIL", "false")
+		t.Setenv("NODE_OPTIONS", "--no-warnings")
+		for _, tc := range []struct {
+			server, skip string
+			want         bool
+		}{
+			{"https://docs.example.test/mcp", "1", true},
+			{"https://docs.example.test/mcp", "", false},
+			{"uvx stdio-server", "1", false}, // the server process would inherit it
+		} {
+			postForm(t, handler, url.Values{"server": {tc.server}, "skip_issuer_check": {tc.skip}})
+			got, err := os.ReadFile(invocation + ".node")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if preloaded := strings.HasPrefix(string(got), "--no-warnings --import=data:text/javascript;base64,"); preloaded != tc.want {
+				t.Errorf("%s skip=%q: NODE_OPTIONS = %q, want preload %v", tc.server, tc.skip, got, tc.want)
+			}
+		}
+	})
 }
 
 func TestParse(t *testing.T) {
