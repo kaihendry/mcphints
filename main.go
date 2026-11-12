@@ -14,6 +14,7 @@ import (
 	"html/template"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -413,7 +414,12 @@ func newHandler() http.Handler {
 }
 
 func main() {
-	http.Handle("/", newHandler())
+	// Bind before announcing, so "listening" means it is, and a taken port
+	// fails instead of logging success first.
+	ln, err := net.Listen("tcp", "localhost:8321")
+	if err != nil {
+		log.Fatal(err)
+	}
 	log.Println("listening on http://localhost:8321")
-	log.Fatal(http.ListenAndServe("localhost:8321", nil))
+	log.Fatal(http.Serve(ln, newHandler()))
 }
