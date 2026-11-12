@@ -17,7 +17,8 @@ Open http://localhost:8321 and enter an MCP server URL or stdio command,
 or paste `tools/list` JSON.
 
 Fetching from a server requires Node.js (`npx`). The MCP Inspector handles
-OAuth and opens your browser when authorization is needed. If a server fails
+OAuth and opens your browser when authorization is needed. Tokens are held
+in memory only (not the OS keychain), so expect to sign in on each fetch. If a server fails
 with "Issuer mismatch" (its OAuth metadata breaks RFC 8414 §3.3), tick **Skip
 OAuth issuer check** to correct it client-side and report it to the vendor.
 

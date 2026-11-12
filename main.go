@@ -303,9 +303,21 @@ func fetchTools(server string, skipIssuerCheck bool) (string, error) {
 	// browser. Tee stderr so the consent URL is visible while waiting and is
 	// still included in the error if the command fails.
 	cmd.Env = append(os.Environ(), "MCP_AUTO_OPEN_ENABLED=true")
+	// Remote only from here: a stdio server would inherit these too.
+	if remote {
+		// By default Inspector keeps each OAuth secret as its own OS keychain
+		// item, and macOS asks for the login password per item: ~20 prompts
+		// per sign-in. Keep OAuth state in memory and a throwaway directory
+		// instead. Nothing is left behind; the cost is signing in every fetch.
+		dir, err := os.MkdirTemp("", "mcphints-inspector-")
+		if err != nil {
+			return "", err
+		}
+		defer os.RemoveAll(dir)
+		cmd.Env = append(cmd.Env, "MCP_INSPECTOR_SECRET_STORE=memory", "MCP_STORAGE_DIR="+dir)
+	}
 	// For servers whose OAuth metadata names the wrong issuer (RFC 8414 §3.3),
-	// preload a fetch wrapper that corrects it. Remote only: a stdio server
-	// would inherit NODE_OPTIONS too.
+	// preload a fetch wrapper that corrects it.
 	if skipIssuerCheck && remote {
 		preload := "--import=data:text/javascript;base64," + base64.StdEncoding.EncodeToString(issuerShim)
 		cmd.Env = append(cmd.Env, "NODE_OPTIONS="+strings.TrimSpace(os.Getenv("NODE_OPTIONS")+" "+preload))

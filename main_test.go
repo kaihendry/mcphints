@@ -22,6 +22,8 @@ func TestSmoke(t *testing.T) {
 set -eu
 printf '%s\n' "${MCP_AUTO_OPEN_ENABLED:-}" "$@" > "$MCPHINTS_SMOKE_INVOCATION"
 printf '%s' "${NODE_OPTIONS:-}" > "$MCPHINTS_SMOKE_INVOCATION.node"
+printf '%s\n' "${MCP_INSPECTOR_SECRET_STORE:-}" "${MCP_STORAGE_DIR:-}" > "$MCPHINTS_SMOKE_INVOCATION.store"
+if [ -d "${MCP_STORAGE_DIR:-/nonexistent}" ]; then echo exists >> "$MCPHINTS_SMOKE_INVOCATION.store"; fi
 printf '%s\n' 'OAuth diagnostic: https://auth.example.test/authorize' >&2
 if [ "$MCPHINTS_SMOKE_FAIL" = true ]; then exit 1; fi
 printf '%s\n' '{"tools":[
@@ -69,6 +71,17 @@ printf '%s\n' '{"tools":[
 			}, "\n")
 			if string(got) != want {
 				t.Errorf("Inspector invocation = %q, want %q", got, want)
+			}
+			// OAuth state must stay out of the OS keychain (one password
+			// prompt per item on macOS) and be discarded after the fetch.
+			store, err := os.ReadFile(invocation + ".store")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if f := strings.Split(strings.TrimSpace(string(store)), "\n"); len(f) != 3 || f[0] != "memory" || f[2] != "exists" {
+				t.Errorf("Inspector secret store = %q, want memory with a storage dir", store)
+			} else if _, err := os.Stat(f[1]); !os.IsNotExist(err) {
+				t.Errorf("Inspector storage dir %s left behind (%v)", f[1], err)
 			}
 
 			body := w.Body.String()
